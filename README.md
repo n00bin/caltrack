@@ -79,6 +79,17 @@ real results from the live API:
 | `072250007559` a US store-brand bread | **Not in the database at all** |
 | `028400090353` Doritos | Not in the database |
 
+Where it does have a product it usually has the label's own **per-serving**
+figures, not just per-100 g — `serving_quantity: 28` and
+`energy-kcal_serving: 150` for a tin of crisps, which is what the packet
+prints. Those are used verbatim, because deriving 150.08 from the per-100 g
+value is close but is not what you are holding in your hand.
+
+Where it has no serving size at all — Nutella, for instance — the form says so
+and leaves the boxes empty for you to read off the packet. It does **not**
+invent a 100 g serving: that looked like captured data and disagreed with the
+label, which is worse than an honest blank.
+
 So the app treats a miss as an ordinary outcome rather than a failure, and it
 never saves a scanned result behind your back — you always see the form first.
 Scanning is a shortcut past typing, not a source of truth. The upside is that

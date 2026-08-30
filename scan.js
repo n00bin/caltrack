@@ -252,7 +252,8 @@ CalTrack.off = (function () {
   'use strict';
 
   var ENDPOINT = 'https://world.openfoodfacts.org/api/v2/product/';
-  var FIELDS = 'code,product_name,generic_name,brands,quantity,product_quantity,serving_size,nutriments';
+  var FIELDS = 'code,product_name,generic_name,brands,quantity,product_quantity,' +
+    'serving_size,serving_quantity,serving_quantity_unit,nutrition_data_per,nutriments';
   var TIMEOUT_MS = 10000;
 
   function num(v) {
@@ -338,18 +339,75 @@ CalTrack.off = (function () {
     return { name: name, grams: value };
   }
 
-  function portionsFrom(product) {
+  /* The per-serving figures exactly as the label prints them.
+   *
+   * These are the numbers the user is looking at while they hold the packet,
+   * so they beat anything derived from the per-100 g values. A tin of crisps
+   * reports energy-kcal_serving 150 against a 28 g serving; deriving it from
+   * 536 per 100 g gives 150.08, which is close but is not what the packet
+   * says, and "the numbers don't add up" is exactly the complaint that gets.
+   */
+  function servingMacrosFrom(n) {
+    var kcal = num(n['energy-kcal_serving']);
+    if (!kcal) {
+      var kj = num(n['energy-kj_serving']) || num(n.energy_serving);
+      if (kj) kcal = kj / 4.184;
+    }
+    if (!kcal) return null;
+    return {
+      kcal: kcal,
+      protein: num(n.proteins_serving),
+      carbs: num(n.carbohydrates_serving),
+      fat: num(n.fat_serving)
+    };
+  }
+
+  /* What one serving is, in grams, from whichever field actually has it.
+   *
+   * serving_size is free text and often missing; serving_quantity is a clean
+   * number but its unit is unreliable (Cheerios reports 28 "ml" for what the
+   * text calls 28 g). Text first, number second.
+   */
+  function servingFrom(product) {
+    var parsed = parseServing(product.serving_size);
+    var grams = (parsed && parsed.grams) ? parsed.grams : 0;
+    var name = (parsed && parsed.name) ? parsed.name : 'serving';
+    var fromVolume = false;
+
+    if (!grams) {
+      var q = num(product.serving_quantity);
+      var unit = String(product.serving_quantity_unit || '').toLowerCase();
+      if (q > 0 && (unit === 'g' || unit === '')) {
+        grams = q;
+      } else if (q > 0 && unit === 'l') {
+        grams = q * 1000; fromVolume = true;
+      } else if (q > 0 && unit === 'ml') {
+        grams = q; fromVolume = true;
+      } else if (parsed && parsed.approxMl) {
+        grams = parsed.approxMl; fromVolume = true;
+      }
+    }
+
+    if (!grams) return null;
+    return {
+      name: name,
+      grams: Math.round(grams * 100) / 100,
+      fromVolume: fromVolume,
+      macros: servingMacrosFrom(product.nutriments || {})
+    };
+  }
+
+  function portionsFrom(product, serving) {
     var portions = [];
     var notes = [];
 
-    var serving = parseServing(product.serving_size);
-    if (serving && serving.grams) {
+    if (serving) {
       portions.push({ name: serving.name, grams: serving.grams });
-    } else if (serving && serving.volumeOnly) {
-      notes.push('The serving is given as a volume (' + serving.volumeOnly +
-        '), not a weight, so it is not a portion until you say so. For a ' +
-        'drink the millilitres are close enough to grams - correct it if this ' +
-        'is something denser, like oil.');
+      if (serving.fromVolume) {
+        notes.push('The label gives the serving as a volume, so ' + serving.grams +
+          ' g is millilitres treated as grams. That is fine for a drink and ' +
+          'wrong for anything denser, like oil - correct it if you need to.');
+      }
     }
 
     // Whole-package weight, handy for "I ate the bag".
@@ -363,13 +421,17 @@ CalTrack.off = (function () {
 
   function draftFrom(product, code) {
     var n = product.nutriments || {};
-    var built = portionsFrom(product);
+    var serving = servingFrom(product);
+    var built = portionsFrom(product, serving);
     var kcal = kcalPer100g(n);
-    var vol = parseServing(product.serving_size);
 
     if (!kcal) {
       built.notes.push('Open Food Facts has this product but no calorie figure, ' +
         'so you will have to type the label yourself.');
+    }
+    if (!serving) {
+      built.notes.push('It has no serving size on record, so you will need to ' +
+        'read that off the packet - the nutrition below is per 100 g.');
     }
 
     return {
@@ -384,9 +446,9 @@ CalTrack.off = (function () {
       },
       portions: built.portions,
       source: 'openfoodfacts',
-      // Offered as a starting weight when there is no real portion.
-      // Never stored on the food; it only prefills the form.
-      suggestedServingGrams: (vol && vol.approxMl) ? Math.round(vol.approxMl) : null,
+      // The label's own serving figures, for the form to show verbatim.
+      // Not stored on the food; per_100g above is what gets saved.
+      serving: serving,
       notes: built.notes
     };
   }
@@ -405,6 +467,8 @@ CalTrack.off = (function () {
     lookup: lookup,
     // exported for the tests
     _parseServing: parseServing,
+    _servingFrom: servingFrom,
+    _servingMacrosFrom: servingMacrosFrom,
     _draftFrom: draftFrom,
     _kcalPer100g: kcalPer100g,
     _tidyName: tidyName,

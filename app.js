@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1602+729069a';
+  var BUILD = '2026-08-30.1627+3ff2421';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -547,35 +547,36 @@
      */
     var serving = named[0] || null;
 
-    /* The boxes must never open empty when we know the nutrition -
-     * empty reads as "the scan failed". With no serving size in the
-     * database, offer a weight and fill the figures in against it:
-     * the volume off the label if there was one, otherwise a round
-     * 100 g. Both are starting points, and changing the weight
-     * recalculates the rest.
+    /* Three cases, in order of how much we actually know:
+     *
+     *  1. the scan gave the label's own per-serving figures - show those
+     *     verbatim, because they are what is printed on the packet
+     *  2. we know a serving weight but not its figures - derive them
+     *  3. we know neither - leave the boxes EMPTY and say so. Filling them
+     *     against a guessed 100 g serving was worse than useless: it looked
+     *     like captured data and disagreed with the packet.
      */
-    var prefillGrams = serving ? serving.grams
-      : (food && food.suggestedServingGrams) ? food.suggestedServingGrams
-      : (per.kcal > 0 ? 100 : '');
+    var label = (food && food.serving && food.serving.macros) || null;
+    var prefillGrams = serving ? serving.grams : '';
     state.svPrefillGrams = prefillGrams;
 
     $('svName').value = serving ? serving.name : '';
     $('svGrams').value = prefillGrams;
-    if (serving && food) {
-      var m = nut.macrosFor(food, serving.name, 1);
+
+    if (label) {
+      $('svKcal').value = round(label.kcal, 2);
+      $('svProtein').value = round(label.protein, 2);
+      $('svCarbs').value = round(label.carbs, 2);
+      $('svFat').value = round(label.fat, 2);
+    } else if (serving && food) {
       // Two decimals: these get converted back to per 100 g on save, so a
       // coarse round here would nudge the stored numbers every time you
       // opened and saved a food without changing anything.
+      var m = nut.macrosFor(food, serving.name, 1);
       $('svKcal').value = round(m.kcal, 2);
       $('svProtein').value = round(m.protein, 2);
       $('svCarbs').value = round(m.carbs, 2);
       $('svFat').value = round(m.fat, 2);
-    } else if (per.kcal > 0 && prefillGrams > 0) {
-      var d = nut.macrosForGrams({ per_100g: per }, prefillGrams);
-      $('svKcal').value = round(d.kcal, 2);
-      $('svProtein').value = round(d.protein, 2);
-      $('svCarbs').value = round(d.carbs, 2);
-      $('svFat').value = round(d.fat, 2);
     } else {
       ['svKcal', 'svProtein', 'svCarbs', 'svFat'].forEach(function (id) { $(id).value = ''; });
     }
@@ -716,9 +717,12 @@
   function updateServingHint() {
     var el = $('svHint');
     if (state.refPer100) {
-      el.textContent = 'The nutrition came from the scan. The weight below is ' +
-        'only a starting point - change it to what one portion actually is, and ' +
-        'the figures follow. Name it and you can log "2 slices" from then on.';
+      el.textContent = $('svGrams').value
+        ? 'Straight off the scan, as the packet prints it. Change the weight if ' +
+          'you eat a different amount and the figures follow.'
+        : 'The scan found this food but not its serving size, so read that off ' +
+          'the packet: what one serving weighs, and what is in it. For reference ' +
+          'it holds ' + round(state.refPer100.kcal) + ' kcal per 100 g.';
     } else {
       el.textContent = "Copy this straight off the label, exactly as it's " +
         'written. The serving weight in grams is printed there too, usually in ' +

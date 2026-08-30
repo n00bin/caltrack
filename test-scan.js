@@ -23,6 +23,11 @@ function eq(label, got, want) {
     '  got=' + JSON.stringify(got) + (ok ? '' : ' want=' + JSON.stringify(want)));
   if (!ok) fails++;
 }
+function near2(label, got, want) {
+  const good = Math.abs(got - want) < 1e-6;
+  console.log((good ? 'PASS  ' : 'FAIL  ') + label + '  got=' + got);
+  if (!good) fails++;
+}
 function ok(label, cond) {
   console.log((cond ? 'PASS  ' : 'FAIL  ') + label);
   if (!cond) fails++;
@@ -76,6 +81,71 @@ eq('normal name untouched', off._tidyName('Original Potato Crisps'), 'Original P
 eq('first brand only', off._firstBrand('Nutella, Ferrero, Yum yum'), 'Nutella');
 eq('no brand', off._firstBrand(undefined), '');
 
+// --- the serving fields, which are what the packet actually says --------
+// Real values captured from the live API on 2026-08-30.
+{
+  const pringles = {
+    serving_size: '1 serving (28 g)',
+    serving_quantity: 28, serving_quantity_unit: 'g',
+    nutriments: {
+      'energy-kcal_100g': 536, proteins_100g: 3.5, carbohydrates_100g: 57, fat_100g: 32,
+      'energy-kcal_serving': 150, proteins_serving: 0.98,
+      carbohydrates_serving: 16, fat_serving: 8.96
+    }
+  };
+  const sv = off._servingFrom(pringles);
+  eq('serving weight taken from the label', sv.grams, 28);
+  eq('and it is not a volume guess', sv.fromVolume, false);
+  eq("the packet's own calories, not 536 x 0.28", sv.macros.kcal, 150);
+  eq('and its protein', sv.macros.protein, 0.98);
+
+  const d = off._draftFrom(pringles, '038000138416');
+  eq('the draft carries the label figures through', d.serving.macros.kcal, 150);
+  eq('and the portion', d.portions[0], { name: 'serving', grams: 28 });
+}
+
+// serving_quantity's unit is unreliable - Cheerios calls 28 g "28 ml".
+// The free text is checked first, so it wins.
+{
+  const cheerios = {
+    serving_size: '3/4 cup (28 g) (28 g)',
+    serving_quantity: 28, serving_quantity_unit: 'ml',
+    nutriments: { 'energy-kcal_100g': 393, 'energy-kcal_serving': 110 }
+  };
+  const sv = off._servingFrom(cheerios);
+  eq('the written grams beat the mislabelled unit', sv.grams, 28);
+  eq('not treated as a volume', sv.fromVolume, false);
+  eq('110 kcal a bowl, as printed', sv.macros.kcal, 110);
+}
+
+// serving_quantity alone, with no free text at all.
+{
+  const sv = off._servingFrom({
+    serving_quantity: 45, serving_quantity_unit: 'g',
+    nutriments: { 'energy-kcal_serving': 180 }
+  });
+  eq('falls back to the numeric field', sv.grams, 45);
+  eq('with its figures', sv.macros.kcal, 180);
+}
+
+// Nutella genuinely has no serving on record.
+{
+  const sv = off._servingFrom({ serving_size: null, nutriments: { 'energy-kcal_100g': 539 } });
+  eq('no serving means no invention', sv, null);
+  const d = off._draftFrom({ product_name: 'Nutella', nutriments: { 'energy-kcal_100g': 539 } }, '3017620422003');
+  eq('and no portion is fabricated', d.portions, []);
+  eq('the draft says so', d.serving, null);
+  ok('and the user is told to read the packet',
+    /no serving size on record/.test(d.notes.join(' ')));
+}
+
+// kJ-only serving figures still convert.
+{
+  const m = off._servingMacrosFrom({ 'energy-kj_serving': 628 });
+  near2('628 kJ a serving is ~150 kcal', m.kcal, 628 / 4.184);
+}
+eq('no serving energy at all', off._servingMacrosFrom({}), null);
+
 // --- a real API payload end to end -------------------------------------
 const nutella = JSON.parse(fs.readFileSync(__dirname + '/test-fixtures/off-nutella.json', 'utf8'));
 const draft = off._draftFrom(nutella.product, nutella.code);
@@ -106,11 +176,10 @@ const drink = off._draftFrom({
   serving_size: '1 serving (16 fl oz)',
   nutriments: { 'energy-kcal_100g': 48.6 }
 }, '070847811169');
-eq('no portion invented for a volume', drink.portions, []);
-ok('and the user is told why', /volume/.test(drink.notes.join(' ')));
-// The number is still offered as a starting weight for the form to show.
-eq('16 fl oz suggested as ~473 g', drink.suggestedServingGrams, Math.round(16 * 29.5735));
-ok('but it is only a suggestion, not a portion', drink.portions.length === 0);
+ok('a volume serving still yields a portion', drink.portions.length === 1);
+// A volume becomes a portion, but only with the assumption spelled out.
+eq('16 fl oz read as ~473 g', drink.portions[0].grams, Math.round(16 * 29.5735 * 100) / 100);
+ok('and the assumption is stated', /millilitres treated as grams/.test(drink.notes.join(' ')));
 
 // Missing calories must be called out, not silently saved as zero.
 const empty = off._draftFrom({ product_name: 'Mystery', nutriments: {} }, '111');
