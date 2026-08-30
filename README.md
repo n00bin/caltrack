@@ -33,8 +33,11 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   per serving instead of per 100 g, open "The label is per serving" and it
   converts for you.
 - **Meals** — a saved list of food + quantity, tapped once instead of four
-  times. Before logging one you can bump any line — four slices of bologna
-  today instead of three — without disturbing the saved meal.
+  times. Build one by picking from your library or by pressing **Scan one in**
+  and pointing the camera at each packet in turn; anything new goes through
+  the usual check-the-label form and drops straight back into the meal.
+  Before logging a meal you can bump any line — four slices of bologna today
+  instead of three — without disturbing the saved meal.
 - **Batch cooking** — list everything that went into the pot, weigh the
   finished dish, and press *Make it a food*. You get a food worked out per
   100 g, so from then on you weigh your bowl and log the grams. It uses the

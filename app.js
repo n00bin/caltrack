@@ -25,6 +25,7 @@
     segment: 'foods',        // Foods tab: foods or meals
     pickSegment: 'foods',    // the + sheet: foods or meals
     editingMealId: null,
+    mealItemAfterSave: false,
     loggingMeal: null,       // { meal, items } while the log-a-meal sheet is open
     settings: {}
   };
@@ -487,6 +488,7 @@
     var isExisting = !!(food && food.id && !opts.asNew);
     state.editingFoodId = isExisting ? food.id : null;
     state.logAfterSave = !!opts.thenLog;
+    state.mealItemAfterSave = !!opts.thenMealItem;
     clearMsg($('foodMsg'));
 
     var notesEl = $('foodNotes');
@@ -679,6 +681,10 @@
       if (!saved) return;
       $('foodSheet').hidden = true;
       toast('Saved');
+      if (state.mealItemAfterSave) {
+        state.mealItemAfterSave = false;
+        return addScannedIngredient(saved);   // scanned while building a meal
+      }
       if (state.logAfterSave) {
         state.logAfterSave = false;
         openQtySheet(saved);          // scanned to eat it, so ask how much
@@ -1357,6 +1363,9 @@
 
   function openScanSheet(purpose) {
     state.scanPurpose = purpose;
+    // Scanning an ingredient happens on top of the meal builder, so that
+    // sheet steps out of the way and comes back with its rows intact.
+    if (purpose === 'meal') $('mealSheet').hidden = true;
     var status = $('scanStatus');
     clearMsg(status);
     $('manualCode').value = '';
@@ -1374,9 +1383,31 @@
     });
   }
 
-  function closeScanSheet() {
+  /* Pass false when the next thing to open is the food editor - the meal
+   * builder should stay out of sight until that is finished with.
+   */
+  function closeScanSheet(restoreMeal) {
     CalTrack.scan.stop();
     $('scanSheet').hidden = true;
+    if (restoreMeal !== false && state.scanPurpose === 'meal') {
+      $('mealSheet').hidden = false;
+    }
+  }
+
+  // Drops a food into the meal builder as a new ingredient row.
+  function addScannedIngredient(food) {
+    var named = (food.portions || []).filter(function (p) { return p.name !== 'gram'; })[0];
+    return store.foods.all().then(function (foods) {
+      state.mealFoods = foods;
+      $('mealSheet').hidden = false;
+      addMealItemRow({
+        food_id: food.id,
+        portion: named ? named.name : 'gram',
+        qty: named ? 1 : 100
+      }, foods);
+      refreshMealTotals();
+      toast('Added ' + food.name);
+    });
   }
 
   /* One barcode, three outcomes:
@@ -1391,6 +1422,10 @@
 
     store.foods.query(function (f) { return f.barcode === code; }).then(function (hits) {
       if (hits.length) {
+        if (state.scanPurpose === 'meal') {
+          closeScanSheet();
+          return addScannedIngredient(hits[0]);
+        }
         closeScanSheet();
         if (state.scanPurpose === 'log') openQtySheet(hits[0]);
         else openFoodSheet(hits[0]);
@@ -1399,24 +1434,30 @@
 
       status.textContent = 'Not one of yours yet. Asking Open Food Facts...';
       return CalTrack.off.lookup(code).then(function (draft) {
-        var toLog = (state.scanPurpose === 'log');
-        closeScanSheet();
+        var purpose = state.scanPurpose;
+        closeScanSheet(false);
+
+        var opts = {
+          asNew: true,
+          thenLog: purpose === 'log',
+          thenMealItem: purpose === 'meal'
+        };
 
         if (!draft) {
-          openFoodSheet({ barcode: code }, {
-            asNew: true,
-            thenLog: toLog,
-            notes: ['Open Food Facts has never heard of ' + code + '. That is ' +
-                    'common for American groceries. Type the label in once and ' +
-                    'the barcode is yours from then on.']
-          });
+          opts.notes = ['Open Food Facts has never heard of ' + code + '. That is ' +
+                        'common for American groceries. Type the label in once and ' +
+                        'the barcode is yours from then on.'];
+          openFoodSheet({ barcode: code }, opts);
           return;
         }
 
-        var notes = draft.notes.slice();
-        notes.unshift('Found in Open Food Facts. It is written by volunteers, ' +
+        opts.notes = draft.notes.slice();
+        opts.notes.unshift('Found in Open Food Facts. It is written by volunteers, ' +
           'so check these numbers against the label before you save.');
-        openFoodSheet(draft, { asNew: true, thenLog: toLog, notes: notes });
+        if (purpose === 'meal') {
+          opts.notes.push('Save it and it drops straight into the meal you are building.');
+        }
+        openFoodSheet(draft, opts);
       });
     }).catch(function (err) {
       showError(status, err.message + ' Close and scan again, or type the number.');
@@ -1621,6 +1662,16 @@
       if (document.hidden && !$('scanSheet').hidden) closeScanSheet();
     });
 
+    // Backing out of the food editor mid-scan must not strand the meal
+    // builder off screen.
+    $('foodSheet').addEventListener('click', function (ev) {
+      if (ev.target !== this && !ev.target.hasAttribute('data-close')) return;
+      if (state.mealItemAfterSave) {
+        state.mealItemAfterSave = false;
+        $('mealSheet').hidden = false;
+      }
+    });
+
     $('manualGo').addEventListener('click', manualLookup);
     $('manualCode').addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter') { ev.preventDefault(); manualLookup(); }
@@ -1648,6 +1699,7 @@
       addMealItemRow(null, state.mealFoods || []);
       refreshMealTotals();
     });
+    $('mealScanItem').addEventListener('click', function () { openScanSheet('meal'); });
     $('saveMealBtn').addEventListener('click', saveMeal);
     $('deleteMealBtn').addEventListener('click', deleteMeal);
     $('batchBtn').addEventListener('click', batchToFood);
