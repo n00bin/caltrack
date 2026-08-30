@@ -4,7 +4,8 @@ A barcode-scanning food log that runs as a plain static web page. No build
 step, no framework, no packaging — the browser reads the files directly.
 
 **Live at [n00bin.github.io/caltrack](https://n00bin.github.io/caltrack/).**
-Open that on your phone and add it to the home screen.
+Open it on your phone, then Chrome menu -> *Install app*. It gets its own
+icon, opens full screen with no address bar, and starts without a signal.
 
 Built to a written build plan kept privately alongside the repo.
 **All six steps of that plan are done** — food logging, barcode scanning,
@@ -132,6 +133,23 @@ a plain `http://192.168.…` address on your phone. The app says so plainly and
 offers the type-the-number box instead. For scanning, use the live HTTPS
 address above; local files and the LAN server are for development.
 
+### Installing it, and working offline
+
+`manifest.json` and `sw.js` make it a real installed app rather than a
+bookmark. The service worker is **network first**: it fetches the current
+files every time and only falls back to its cache when the network fails or
+takes more than three seconds. Cache-first would load quicker but go stale -
+you would push a fix and the phone would keep running last week's code.
+At about 100 KB total, fetching fresh costs nothing worth having.
+
+Anything on another origin - Open Food Facts, the ZXing library - is left
+alone entirely. A barcode lookup should fail honestly when there's no signal
+rather than quietly serve yesterday's answer.
+
+So: **everything works offline except barcode lookups**, which need the
+network by their nature. Settings has a line telling you whether the app is
+saved for offline use, and a button to force it to the newest version.
+
 ### The one external dependency
 
 Chrome on Android has a barcode reader built in, so on the phone this app
@@ -164,9 +182,13 @@ there are no accounts yet. That means:
 | `test-store.js` | `node test-store.js` — the data layer, portions, meals, batch cooking. |
 | `test-scan.js` | `node test-scan.js` — barcode check-digits and the API parsing, against real captured responses in `test-fixtures/`. |
 | `test-trend.js` | `node test-trend.js` — the TDEE and plateau maths against synthetic data with known answers. |
+| `test-shell.js` | `node test-shell.js` — checks every file the page loads is in the offline cache, and that the manifest will actually install. |
+| `manifest.json`, `sw.js` | What makes it installable and offline-capable. |
+| `tools/make-icons.py` | Regenerates `icons/` if the mark ever changes. |
 
 All three run without a browser and without a network: `node test-store.js &&
-node test-scan.js && node test-trend.js` is 142 checks in about a second.
+node test-scan.js && node test-trend.js && node test-shell.js` is 174
+checks in about a second.
 
 `store.js` is deliberately walled off, and every one of its functions returns a
 Promise even though `localStorage` is instant. That's so the phase 3 move to

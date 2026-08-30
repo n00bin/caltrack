@@ -3,9 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#111418">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1e24">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Calories">
 <title>Calorie Tracker</title>
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
 </head>
 <body>
 
@@ -131,6 +138,12 @@
       <button id="importBtn" class="btn wide">Restore from a backup file</button>
       <input type="file" id="importFile" accept="application/json,.json" class="visually-hidden">
       <p id="backupMsg" class="msg"></p>
+    </div>
+
+    <div class="card">
+      <h2>The app itself</h2>
+      <p id="offlineState" class="hint">Checking...</p>
+      <button id="updateBtn" class="btn wide">Check for an update</button>
     </div>
 
     <div class="card danger">

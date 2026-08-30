@@ -1440,7 +1440,52 @@
 
   // ------------------------------------------------------------ settings
 
+  // ------------------------------------------------------- offline support
+
+  /* The service worker is what lets the app open with no signal. It is
+   * registered here rather than inline so there is one place to look when
+   * it misbehaves. Nothing else in the app depends on it - if registration
+   * fails, everything still works, it just needs a connection to start.
+   */
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    navigator.serviceWorker.register('sw.js').catch(function (err) {
+      console.warn('[app] offline support unavailable', err);
+    });
+  }
+
+  function renderOfflineState() {
+    var el = $('offlineState');
+    if (!('serviceWorker' in navigator)) {
+      el.textContent = 'This browser cannot store the app for offline use.';
+      return;
+    }
+    if (navigator.serviceWorker.controller) {
+      el.textContent = 'Saved for offline use. It will open without a signal; ' +
+        'barcode lookups still need one.';
+    } else {
+      el.textContent = 'Not saved for offline use yet. Reload once while online ' +
+        'and it will be.';
+    }
+  }
+
+  function checkForUpdate() {
+    var el = $('offlineState');
+    if (!('serviceWorker' in navigator)) { location.reload(); return; }
+    el.textContent = 'Looking...';
+    navigator.serviceWorker.getRegistration().then(function (reg) {
+      return reg ? reg.update() : null;
+    }).then(function () {
+      toast('Reloading with the latest version');
+      setTimeout(function () { location.reload(); }, 400);
+    }).catch(function () {
+      location.reload();
+    });
+  }
+
   function renderSettings() {
+    renderOfflineState();
     $('setTargetKcal').value = state.settings.target_kcal || '';
     $('setGoalWeight').value = state.settings.goal_weight_lbs || '';
     $('setTargetRate').value = state.settings.target_rate_lbs_per_week || '';
@@ -1625,10 +1670,12 @@
       this.value = '';
     });
     $('clearBtn').addEventListener('click', clearEverything);
+    $('updateBtn').addEventListener('click', checkForUpdate);
   }
 
   function init() {
     bind();
+    registerServiceWorker();
     store.getSettings().then(function (s) {
       state.settings = s;
       setView('today');
