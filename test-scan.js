@@ -50,10 +50,11 @@ eq('decimal comma', off._parseServing('28,5 g'), { name: 'serving', grams: 28.5 
 eq('"3/4 cup (28 g) (28 g)" stays generic',
   off._parseServing('3/4 cup (28 g) (28 g)'), { name: 'serving', grams: 28 });
 
-eq('volume only is flagged, not guessed',
-  off._parseServing('355ml'), { volumeOnly: '355ml' });
-eq('fluid ounces likewise',
-  off._parseServing('1 serving (16 fl oz)'), { volumeOnly: '1 serving (16 fl oz)' });
+eq('volume only is flagged, never treated as a portion',
+  off._parseServing('355ml'), { volumeOnly: '355ml', approxMl: 355 });
+eq('fluid ounces are converted to ml',
+  off._parseServing('1 serving (16 fl oz)'),
+  { volumeOnly: '1 serving (16 fl oz)', approxMl: 16 * 29.5735 });
 eq('empty', off._parseServing(''), null);
 eq('missing', off._parseServing(null), null);
 eq('no number', off._parseServing('one slice'), null);
@@ -107,6 +108,9 @@ const drink = off._draftFrom({
 }, '070847811169');
 eq('no portion invented for a volume', drink.portions, []);
 ok('and the user is told why', /volume/.test(drink.notes.join(' ')));
+// The number is still offered as a starting weight for the form to show.
+eq('16 fl oz suggested as ~473 g', drink.suggestedServingGrams, Math.round(16 * 29.5735));
+ok('but it is only a suggestion, not a portion', drink.portions.length === 0);
 
 // Missing calories must be called out, not silently saved as zero.
 const empty = off._draftFrom({ product_name: 'Mystery', nutriments: {} }, '111');

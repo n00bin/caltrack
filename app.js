@@ -25,6 +25,7 @@
     segment: 'foods',        // Foods tab: foods or meals
     pickSegment: 'foods',    // the + sheet: foods or meals
     nutMode: 'serving',      // how the food editor is asking for nutrition
+    svPrefillGrams: '',      // the serving weight the app suggested
     refPer100: null,         // nutrition already known, from a scan or a save
     svTouched: false,        // has the user overridden the derived figures?
     dayTotal: 0,             // kcal already logged on the day being shown
@@ -552,8 +553,21 @@
      * nothing to be per-serving about, so that one opens on per 100 g.
      */
     var serving = named[0] || null;
+
+    /* The boxes must never open empty when we know the nutrition -
+     * empty reads as "the scan failed". With no serving size in the
+     * database, offer a weight and fill the figures in against it:
+     * the volume off the label if there was one, otherwise a round
+     * 100 g. Both are starting points, and changing the weight
+     * recalculates the rest.
+     */
+    var prefillGrams = serving ? serving.grams
+      : (food && food.suggestedServingGrams) ? food.suggestedServingGrams
+      : (per.kcal > 0 ? 100 : '');
+    state.svPrefillGrams = prefillGrams;
+
     $('svName').value = serving ? serving.name : '';
-    $('svGrams').value = serving ? serving.grams : '';
+    $('svGrams').value = prefillGrams;
     if (serving && food) {
       var m = nut.macrosFor(food, serving.name, 1);
       // Two decimals: these get converted back to per 100 g on save, so a
@@ -563,6 +577,12 @@
       $('svProtein').value = round(m.protein, 2);
       $('svCarbs').value = round(m.carbs, 2);
       $('svFat').value = round(m.fat, 2);
+    } else if (per.kcal > 0 && prefillGrams > 0) {
+      var d = nut.macrosForGrams({ per_100g: per }, prefillGrams);
+      $('svKcal').value = round(d.kcal, 2);
+      $('svProtein').value = round(d.protein, 2);
+      $('svCarbs').value = round(d.carbs, 2);
+      $('svFat').value = round(d.fat, 2);
     } else {
       ['svKcal', 'svProtein', 'svCarbs', 'svFat'].forEach(function (id) { $(id).value = ''; });
     }
@@ -730,10 +750,9 @@
   function updateServingHint() {
     var el = $('svHint');
     if (state.refPer100) {
-      el.textContent = 'The nutrition is already in: ' + round(state.refPer100.kcal) +
-        ' kcal per 100 g. Now tell me what one portion weighs - a slice, a bottle, ' +
-        'a handful - and the rest fills in by itself. Skip it and you can still ' +
-        'log this by the gram.';
+      el.textContent = 'The nutrition came from the scan. The weight below is ' +
+        'only a starting point - change it to what one portion actually is, and ' +
+        'the figures follow. Name it and you can log "2 slices" from then on.';
     } else {
       el.textContent = "Copy this straight off the label, exactly as it's written. " +
         'The serving weight in grams is printed there too, usually in brackets ' +
@@ -782,6 +801,10 @@
       var sKcal = parseFloat($('svKcal').value);
       var haveServing = (grams > 0) && isFinite(sKcal) && sKcal >= 0;
       var unit = ($('svName').value.trim() || 'serving').toLowerCase();
+      // A prefilled weight the user never touched is the app's guess,
+      // not a portion they have told us about.
+      var engaged = !!$('svName').value.trim() || state.svTouched ||
+        grams !== Number(state.svPrefillGrams);
       var extras = collectPortions().filter(function (p) {
         return p.name.toLowerCase() !== unit;
       });
@@ -794,7 +817,9 @@
           carbs: parseFloat($('svCarbs').value) || 0,
           fat: parseFloat($('svFat').value) || 0
         }, grams);
-        portions = [{ name: unit, grams: grams }].concat(extras);
+        portions = engaged
+          ? [{ name: unit, grams: grams }].concat(extras)
+          : extras;
       } else if (state.refPer100) {
         // A scan with no portion given is still perfectly usable - it just
         // gets logged by the gram until a weight is added.

@@ -313,7 +313,14 @@ CalTrack.off = (function () {
     var grams = text.match(/([\d]+(?:[.,][\d]+)?)\s*g\b/i);
     if (!grams) {
       var ml = text.match(/([\d]+(?:[.,][\d]+)?)\s*(ml|fl\s*oz)\b/i);
-      return ml ? { volumeOnly: text } : null;   // a drink; grams unknown
+      if (!ml) return null;
+      // Still not a portion - but the number is worth keeping as a
+      // starting weight the user can confirm or correct.
+      var value = parseFloat(ml[1].replace(',', '.'));
+      return {
+        volumeOnly: text,
+        approxMl: /oz/i.test(ml[2]) ? value * 29.5735 : value
+      };
     }
 
     var value = parseFloat(grams[1].replace(',', '.'));
@@ -340,8 +347,9 @@ CalTrack.off = (function () {
       portions.push({ name: serving.name, grams: serving.grams });
     } else if (serving && serving.volumeOnly) {
       notes.push('The serving is given as a volume (' + serving.volumeOnly +
-        '), not a weight, so no portion was added. For a drink the millilitres ' +
-        'are close enough to grams if you want to add one yourself.');
+        '), not a weight, so it is not a portion until you say so. For a ' +
+        'drink the millilitres are close enough to grams - correct it if this ' +
+        'is something denser, like oil.');
     }
 
     // Whole-package weight, handy for "I ate the bag".
@@ -357,6 +365,7 @@ CalTrack.off = (function () {
     var n = product.nutriments || {};
     var built = portionsFrom(product);
     var kcal = kcalPer100g(n);
+    var vol = parseServing(product.serving_size);
 
     if (!kcal) {
       built.notes.push('Open Food Facts has this product but no calorie figure, ' +
@@ -375,6 +384,9 @@ CalTrack.off = (function () {
       },
       portions: built.portions,
       source: 'openfoodfacts',
+      // Offered as a starting weight when there is no real portion.
+      // Never stored on the food; it only prefills the form.
+      suggestedServingGrams: (vol && vol.approxMl) ? Math.round(vol.approxMl) : null,
       notes: built.notes
     };
   }
