@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1739+5b0e915';
+  var BUILD = '2026-08-30.1745+c24e21d';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -547,20 +547,27 @@
      */
     var serving = named[0] || null;
 
-    /* Three cases, in order of how much we actually know:
+    /* Four cases, in order of how much is actually known. The boxes are
+     * only ever left empty when nothing at all can be worked out - a blank
+     * form after a successful scan reads as a failure, which is how this
+     * looked when the recovered serving sat behind a button nobody pressed.
      *
-     *  1. the scan gave the label's own per-serving figures - show those
-     *     verbatim, because they are what is printed on the packet
-     *  2. we know a serving weight but not its figures - derive them
-     *  3. we know neither - leave the boxes EMPTY and say so. Filling them
-     *     against a guessed 100 g serving was worse than useless: it looked
-     *     like captured data and disagreed with the packet.
+     *  1. the label's own per-serving figures came with the scan - verbatim
+     *  2. a serving weight is known but not its figures - derive them
+     *  3. neither, but the per-100 g decimals give the serving away -
+     *     use what they imply and say plainly that is what happened
+     *  4. nothing to go on - empty, with the packet-reading prompt
      */
     var label = (food && food.serving && food.serving.macros) || null;
-    var prefillGrams = serving ? serving.grams : '';
+    var inferred = (!serving && per.kcal > 0)
+      ? CalTrack.off.inferServing(per) : null;
+
+    var prefillGrams = serving ? serving.grams : (inferred ? inferred.grams : '');
     state.svPrefillGrams = prefillGrams;
 
-    $('svName').value = serving ? serving.name : '';
+    // A recovered serving is named, so saving keeps it as a real portion
+    // rather than treating the weight as the app's own untouched guess.
+    $('svName').value = serving ? serving.name : (inferred ? 'serving' : '');
     $('svGrams').value = prefillGrams;
 
     if (label) {
@@ -577,11 +584,16 @@
       $('svProtein').value = round(m.protein, 2);
       $('svCarbs').value = round(m.carbs, 2);
       $('svFat').value = round(m.fat, 2);
+    } else if (inferred) {
+      $('svKcal').value = inferred.kcal;
+      $('svProtein').value = inferred.protein;
+      $('svCarbs').value = inferred.carbs;
+      $('svFat').value = inferred.fat;
     } else {
       ['svKcal', 'svProtein', 'svCarbs', 'svFat'].forEach(function (id) { $(id).value = ''; });
     }
 
-    showServingSuggestion(serving);
+    showServingNote(serving, inferred);
 
     /* Whatever nutrition we already hold - from a scan, or from the saved
      * food - becomes the REFERENCE, so changing the portion weight can
@@ -733,45 +745,25 @@
     }
   }
 
-  /* When the database lost the serving size, the leftover decimals often
-   * give it away. Offer what they imply, with the working shown, and let the
-   * user check it against the packet before it goes anywhere.
+  /* Says where a recovered serving came from. The figures are already in
+   * the boxes above - this explains that they were worked out rather than
+   * read, so they get checked against the packet rather than trusted.
    */
-  function showServingSuggestion(serving) {
+  function showServingNote(serving, inferred) {
     var box = $('svSuggest');
     box.innerHTML = '';
     box.hidden = true;
-    if (serving || !state.refPer100) return;
-
-    var guess = CalTrack.off.inferServing(state.refPer100);
-    if (!guess) return;
+    if (serving || !inferred) return;
 
     var text = document.createElement('p');
     text.className = 'hint';
-    text.style.margin = '0 0 8px';
-    text.textContent = 'These figures look like they were typed from a ' +
-      guess.grams + ' g serving: ' + guess.kcal + ' kcal, ' + guess.protein +
-      ' g protein, ' + guess.carbs + ' g carbs, ' + guess.fat + ' g fat. ' +
-      'Check that against the packet before you use it.';
-
-    var use = document.createElement('button');
-    use.type = 'button';
-    use.className = 'btn small';
-    use.textContent = 'Use ' + guess.grams + ' g';
-    use.addEventListener('click', function () {
-      $('svGrams').value = guess.grams;
-      $('svKcal').value = guess.kcal;
-      $('svProtein').value = guess.protein;
-      $('svCarbs').value = guess.carbs;
-      $('svFat').value = guess.fat;
-      state.svTouched = true;         // these are label figures now, not derived
-      box.hidden = true;
-      updateServingEcho();
-      $('svName').focus();
-    });
+    text.style.margin = '0';
+    text.textContent = 'The database had no serving size for this, but its ' +
+      'per-100 g figures divide exactly by ' + inferred.grams + ' g - so that is ' +
+      'almost certainly the serving someone typed in, and it is what is filled ' +
+      'in above. Worth checking against the packet.';
 
     box.appendChild(text);
-    box.appendChild(use);
     box.hidden = false;
   }
 
