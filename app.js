@@ -25,6 +25,7 @@
     segment: 'foods',        // Foods tab: foods or meals
     pickSegment: 'foods',    // the + sheet: foods or meals
     nutMode: 'serving',      // how the food editor is asking for nutrition
+    dayTotal: 0,             // kcal already logged on the day being shown
     editingMealId: null,
     mealItemAfterSave: false,
     loggingMeal: null,       // { meal, items } while the log-a-meal sheet is open
@@ -85,6 +86,19 @@
   function plural(name, qty) {
     if (qty === 1) return name;
     return name + (/s$/i.test(name) ? '' : 's');
+  }
+
+  /* Answers the question you are actually asking when you log something:
+   * does this still fit? Uses the total for the day being shown, which is
+   * also the day the entry will be written to.
+   */
+  function leftAfter(extraKcal) {
+    var target = state.settings.target_kcal;
+    if (!(target > 0)) return '';
+    var left = target - (state.dayTotal || 0) - extraKcal;
+    return left >= 0
+      ? 'That leaves ' + round(left) + ' for the day.'
+      : 'That puts you ' + round(-left) + ' over.';
   }
 
   var toastTimer = null;
@@ -153,22 +167,36 @@
       foods.forEach(function (f) { byId[f.id] = f; });
 
       var t = nut.totals(entries);
-      $('kcalTotal').textContent = round(t.kcal);
+      state.dayTotal = t.kcal;          // so the amount box can say what fits
+
       $('mProtein').textContent = round(t.protein, 1);
       $('mCarbs').textContent = round(t.carbs, 1);
       $('mFat').textContent = round(t.fat, 1);
 
-      var targetEl = $('kcalTarget');
+      /* What's left is the number you act on, so it gets to be the big one.
+       * What you've eaten is context, and moves underneath.
+       */
       var target = state.settings.target_kcal;
-      if (target) {
+      var caption = $('kcalCaption');
+      var bar = $('kcalBar');
+
+      if (target > 0) {
         var left = target - t.kcal;
-        targetEl.textContent = left >= 0
-          ? round(left) + ' left of ' + target
-          : round(-left) + ' over your ' + target + ' target';
-        targetEl.classList.toggle('over', left < 0);
+        $('kcalBig').textContent = round(Math.abs(left));
+        $('kcalUnit').textContent = left >= 0 ? 'kcal left' : 'kcal over';
+        caption.textContent = round(t.kcal) + ' of ' + round(target) + ' eaten';
+        caption.classList.toggle('over', left < 0);
+
+        bar.hidden = false;
+        bar.classList.toggle('over', left < 0);
+        $('kcalBarFill').style.width =
+          Math.max(0, Math.min(100, (t.kcal / target) * 100)) + '%';
       } else {
-        targetEl.textContent = '';
-        targetEl.classList.remove('over');
+        $('kcalBig').textContent = round(t.kcal);
+        $('kcalUnit').textContent = 'kcal';
+        caption.textContent = 'No daily target yet. Settings can work one out for you.';
+        caption.classList.remove('over');
+        bar.hidden = true;
       }
 
       var list = $('logList');
@@ -436,12 +464,14 @@
     var portion = $('qtyPortion').value;
     var grams = nut.gramsFor(food, portion, qty);
     var m = nut.macrosForGrams(food, grams);
+    var fits = leftAfter(m.kcal);
     $('qtyPreview').innerHTML =
       '<b>' + round(m.kcal) + '</b> kcal<br>' +
       round(grams, 1) + ' g  -  ' +
       round(m.protein, 1) + ' g protein, ' +
       round(m.carbs, 1) + ' g carbs, ' +
-      round(m.fat, 1) + ' g fat';
+      round(m.fat, 1) + ' g fat' +
+      (fits ? '<br><span class="fits">' + fits + '</span>' : '');
   }
 
   function confirmQty() {
@@ -1123,9 +1153,11 @@
 
   function refreshMealLogTotals() {
     var t = mealTotals(collectMealLogItems(), indexById(state.mealFoods || []));
+    var fits = leftAfter(t.kcal);
     $('mealLogTotals').innerHTML = '<b>' + round(t.kcal) + '</b> kcal<br>' +
       round(t.protein, 1) + ' g protein, ' + round(t.carbs, 1) + ' g carbs, ' +
-      round(t.fat, 1) + ' g fat';
+      round(t.fat, 1) + ' g fat' +
+      (fits ? '<br><span class="fits">' + fits + '</span>' : '');
   }
 
   function confirmMealLog() {

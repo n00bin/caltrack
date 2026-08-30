@@ -102,6 +102,27 @@ main { padding: 12px; max-width: 640px; margin: 0 auto; }
 .target { color: var(--muted); font-size: .9rem; margin-top: 6px; min-height: 1.2em; }
 .target.over { color: var(--danger); }
 
+/* How much of the day's allowance is gone. Fills up, then turns red. */
+.bar {
+  height: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+.bar[hidden] { display: none; }
+.bar > div {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width .25s ease;
+}
+.bar.over > div { background: var(--danger); }
+
+.fits { color: var(--text); font-weight: 600; }
+
 .macros {
   display: flex; justify-content: space-around;
   margin-top: 16px; padding-top: 14px;

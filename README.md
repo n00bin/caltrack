@@ -13,12 +13,17 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
 
 ## What works right now
 
-- **Today** — your log for a day, grouped into breakfast / lunch / dinner /
-  snack, with calories and macros for each meal and for the day. Step backwards
-  and forwards through days, or tap the date to jump to one.
+- **Today** — how much you have **left** today, big, updating the moment you
+  log anything, with a bar showing how much of the day's allowance is gone.
+  Underneath, the log grouped into breakfast / lunch / dinner / snack with
+  calories and macros for each meal. Step backwards and forwards through days,
+  or tap the date to jump to one. Go over and the number flips to how far over
+  you are, in red.
 - **Logging** — the round `+` button. It guesses the meal from the clock,
   shows your foods most-recently-used first, then asks for an amount. Two taps
-  and a number for something you've eaten before.
+  and a number for something you've eaten before. Before you commit it tells
+  you what it would leave you for the day, so you can decide on the spot
+  whether it fits.
 - **Scanning** — the Scan button. Point it at a barcode and one of three
   things happens: it's already one of your foods and you go straight to the
   amount box; it's in Open Food Facts and you get a filled-in form to check;
