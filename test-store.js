@@ -147,6 +147,30 @@ function checkTrue(label, cond) {
   checkTrue('editing and re-saving does not move the number',
     Math.abs(roundTrip.kcal - fromLabel.per_100g.kcal) < 0.05);
 
+  // --- scanned food, no serving size given -------------------------------
+  // The common case: Open Food Facts has the nutrition per 100 g but no
+  // serving. You type only what one portion weighs, and the app derives the
+  // rest - then converts it back on save. That round trip must be exact, or
+  // saving a scanned food would quietly alter the figures the scan gave.
+  const scanned = { per_100g: { kcal: 536, protein: 3.5, carbs: 57, fat: 32 } };
+  const derived = nut.macrosForGrams(scanned, 28);
+  check('28 g of a 536 kcal/100 g food', derived.kcal, 536 * 0.28);
+  check('and its fat', derived.fat, 32 * 0.28);
+
+  const backAgain = nut.per100gFrom(derived, 28);
+  check('converting back gives the same kcal', backAgain.kcal, 536);
+  check('the same protein', backAgain.protein, 3.5);
+  check('the same carbs', backAgain.carbs, 57);
+  check('the same fat', backAgain.fat, 32);
+
+  // And the portion then behaves like any other.
+  const withPortion = {
+    per_100g: backAgain,
+    portions: [{ name: 'serving', grams: 28 }, { name: 'gram', grams: 1 }]
+  };
+  check('logging one serving matches the derived figure',
+    nut.macrosFor(withPortion, 'serving', 1).kcal, derived.kcal);
+
   // --- weigh to derive ---------------------------------------------------
   check('five slices weighing 140 g means 28 g each', nut.perUnitGrams(140, 5), 28);
   check('one item on the scale', nut.perUnitGrams(31.5, 1), 31.5);

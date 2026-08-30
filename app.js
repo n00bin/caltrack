@@ -25,6 +25,8 @@
     segment: 'foods',        // Foods tab: foods or meals
     pickSegment: 'foods',    // the + sheet: foods or meals
     nutMode: 'serving',      // how the food editor is asking for nutrition
+    refPer100: null,         // nutrition already known, from a scan or a save
+    svTouched: false,        // has the user overridden the derived figures?
     dayTotal: 0,             // kcal already logged on the day being shown
     editingMealId: null,
     mealItemAfterSave: false,
@@ -565,7 +567,20 @@
       ['svKcal', 'svProtein', 'svCarbs', 'svFat'].forEach(function (id) { $(id).value = ''; });
     }
 
-    setNutMode((serving || !food) ? 'serving' : 'per100');
+    /* Whatever nutrition we already hold - from a scan, or from the saved
+     * food - becomes the REFERENCE. With a reference, the serving pane is
+     * only asking what one portion weighs, and fills the rest in itself.
+     * Without one, it is asking for the label.
+     */
+    state.refPer100 = (per.kcal > 0) ? {
+      kcal: per.kcal, protein: per.protein || 0,
+      carbs: per.carbs || 0, fat: per.fat || 0
+    } : null;
+    state.svTouched = false;
+
+    // Always per serving. Per 100 g is now purely an opt-in for European
+    // labels, never somewhere the app dumps you.
+    setNutMode('serving');
 
     // The serving is edited above, so only the extra ones are listed here.
     $('portionRows').innerHTML = '';
@@ -708,7 +723,37 @@
     Array.prototype.forEach.call($('nutMode').querySelectorAll('button'), function (b) {
       b.classList.toggle('is-active', b.dataset.mode === mode);
     });
+    updateServingHint();
     updateServingEcho();
+  }
+
+  function updateServingHint() {
+    var el = $('svHint');
+    if (state.refPer100) {
+      el.textContent = 'The nutrition is already in: ' + round(state.refPer100.kcal) +
+        ' kcal per 100 g. Now tell me what one portion weighs - a slice, a bottle, ' +
+        'a handful - and the rest fills in by itself. Skip it and you can still ' +
+        'log this by the gram.';
+    } else {
+      el.textContent = "Copy this straight off the label, exactly as it's written. " +
+        'The serving weight in grams is printed there too, usually in brackets ' +
+        'right after the serving size - "1 slice (28g)".';
+    }
+  }
+
+  /* Type "28 g" against a food whose nutrition we already have, and the four
+   * boxes fill themselves. Stops the moment you edit one by hand - at that
+   * point the label in front of you beats the database.
+   */
+  function fillServingFromReference() {
+    if (!state.refPer100 || state.svTouched) return;
+    var grams = parseFloat($('svGrams').value);
+    if (!(grams > 0)) return;
+    var m = nut.macrosForGrams({ per_100g: state.refPer100 }, grams);
+    $('svKcal').value = round(m.kcal, 2);
+    $('svProtein').value = round(m.protein, 2);
+    $('svCarbs').value = round(m.carbs, 2);
+    $('svFat').value = round(m.fat, 2);
   }
 
   // Shows the working, so the numbers are never a black box.
@@ -734,28 +779,35 @@
 
     if (state.nutMode === 'serving') {
       var grams = parseFloat($('svGrams').value);
-      if (!isFinite(grams) || grams <= 0) {
-        showError(msg, 'How much does one serving weigh? The label gives it in ' +
-          'grams, in brackets after the serving size.');
-        return;
-      }
       var sKcal = parseFloat($('svKcal').value);
-      if (!isFinite(sKcal) || sKcal < 0) {
-        showError(msg, 'Enter the calories in one serving.');
+      var haveServing = (grams > 0) && isFinite(sKcal) && sKcal >= 0;
+      var unit = ($('svName').value.trim() || 'serving').toLowerCase();
+      var extras = collectPortions().filter(function (p) {
+        return p.name.toLowerCase() !== unit;
+      });
+
+      if (haveServing) {
+        // Same arithmetic as batch cooking, and tested in the same place.
+        per100 = nut.per100gFrom({
+          kcal: sKcal,
+          protein: parseFloat($('svProtein').value) || 0,
+          carbs: parseFloat($('svCarbs').value) || 0,
+          fat: parseFloat($('svFat').value) || 0
+        }, grams);
+        portions = [{ name: unit, grams: grams }].concat(extras);
+      } else if (state.refPer100) {
+        // A scan with no portion given is still perfectly usable - it just
+        // gets logged by the gram until a weight is added.
+        per100 = state.refPer100;
+        portions = (grams > 0) ? [{ name: unit, grams: grams }].concat(extras) : extras;
+      } else if (grams > 0) {
+        showError(msg, 'Enter the calories in one ' + unit + '.');
+        return;
+      } else {
+        showError(msg, 'Enter what one serving weighs and what is in it, or ' +
+          'switch to Per 100 g if that is how your label is written.');
         return;
       }
-      // Same arithmetic as batch cooking, and tested in the same place.
-      per100 = nut.per100gFrom({
-        kcal: sKcal,
-        protein: parseFloat($('svProtein').value) || 0,
-        carbs: parseFloat($('svCarbs').value) || 0,
-        fat: parseFloat($('svFat').value) || 0
-      }, grams);
-
-      var unit = ($('svName').value.trim() || 'serving').toLowerCase();
-      portions = [{ name: unit, grams: grams }].concat(
-        collectPortions().filter(function (p) { return p.name.toLowerCase() !== unit; })
-      );
     } else {
       var kcal = parseFloat($('fKcal').value);
       if (!isFinite(kcal) || kcal < 0) {
@@ -1965,9 +2017,17 @@
       var b = ev.target.closest('button[data-mode]');
       if (b) setNutMode(b.dataset.mode);
     });
-    ['svName', 'svGrams', 'svKcal'].forEach(function (id) {
-      $(id).addEventListener('input', updateServingEcho);
+    $('svGrams').addEventListener('input', function () {
+      fillServingFromReference();
+      updateServingEcho();
     });
+    ['svKcal', 'svProtein', 'svCarbs', 'svFat'].forEach(function (id) {
+      $(id).addEventListener('input', function () {
+        state.svTouched = true;      // hand-typed figures win from here
+        updateServingEcho();
+      });
+    });
+    $('svName').addEventListener('input', updateServingEcho);
     $('saveFoodBtn').addEventListener('click', saveFood);
     $('deleteFoodBtn').addEventListener('click', deleteFood);
 
