@@ -132,6 +132,7 @@ CalTrack.usda = (function () {
         name: 'serving',
         grams: Math.round(size.grams * 100) / 100,
         fromVolume: size.fromVolume,
+        label: String(food.householdServingFullText || '').trim(),
         macros: macros
       };
       portions.push({ name: serving.name, grams: serving.grams });

@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1750+be73b0f';
+  var BUILD = '2026-08-30.1819+16a27f2';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -31,6 +31,7 @@
     svPrefillGrams: '',      // the serving weight the app suggested
     refPer100: null,         // nutrition already known, from a scan or a save
     svTouched: false,        // has the user overridden the derived figures?
+    svFromData: false,       // the serving weight came from a lookup, not a guess
     dayTotal: 0,             // kcal already logged on the day being shown
     editingMealId: null,
     mealItemAfterSave: false,
@@ -565,10 +566,18 @@
     var prefillGrams = serving ? serving.grams : (inferred ? inferred.grams : '');
     state.svPrefillGrams = prefillGrams;
 
-    // A recovered serving is named, so saving keeps it as a real portion
-    // rather than treating the weight as the app's own untouched guess.
-    $('svName').value = serving ? serving.name : (inferred ? 'serving' : '');
+    /* The name box stays EMPTY unless the food already has a real portion
+     * name. Filling it with the word "serving" made the form read "a serving
+     * is one serving", and a serving is often two of something anyway - the
+     * packet says "2 sheets". Blank means it is simply called a serving.
+     */
+    var realName = serving && serving.name !== 'serving' ? serving.name : '';
+    $('svName').value = realName;
     $('svGrams').value = prefillGrams;
+
+    // A weight that came from data is a portion worth keeping, even if the
+    // user never touches the name box.
+    state.svFromData = !!(serving || inferred);
 
     if (label) {
       $('svKcal').value = round(label.kcal, 2);
@@ -753,15 +762,25 @@
     var box = $('svSuggest');
     box.innerHTML = '';
     box.hidden = true;
-    if (serving || !inferred) return;
 
     var text = document.createElement('p');
     text.className = 'hint';
     text.style.margin = '0';
-    text.textContent = 'The database had no serving size for this, but its ' +
-      'per-100 g figures divide exactly by ' + inferred.grams + ' g - so that is ' +
-      'almost certainly the serving someone typed in, and it is what is filled ' +
-      'in above. Worth checking against the packet.';
+
+    if (serving && serving.label) {
+      // "2 sheets (31 g)" or "2 full" - what the packet actually says, which
+      // is far more use than a bare weight when you are holding the box.
+      text.textContent = 'The label calls one serving "' + serving.label +
+        '". Leave the name blank and it logs as "1 serving"; put "sheet" in ' +
+        'and change the weight to one sheet if you would rather count those.';
+    } else if (!serving && inferred) {
+      text.textContent = 'The database had no serving size for this, but its ' +
+        'per-100 g figures divide exactly by ' + inferred.grams + ' g - so that ' +
+        'is almost certainly the serving someone typed in, and it is what is ' +
+        'filled in above. Worth checking against the packet.';
+    } else {
+      return;
+    }
 
     box.appendChild(text);
     box.hidden = false;
@@ -788,9 +807,12 @@
     var g = parseFloat($('svGrams').value);
     var kcal = parseFloat($('svKcal').value);
     if (!(g > 0) || !isFinite(kcal)) { el.textContent = ''; return; }
-    var unit = $('svName').value.trim() || 'serving';
-    el.textContent = 'So one ' + unit + ' is ' + round(kcal) + ' kcal, and you can ' +
-      'log it as "2 ' + plural(unit, 2) + '" without thinking about grams again.';
+    var unit = $('svName').value.trim();
+    el.textContent = unit
+      ? 'So one ' + unit + ' is ' + round(kcal) + ' kcal, and you can log "2 ' +
+        plural(unit, 2) + '" without thinking about grams again.'
+      : 'So a serving is ' + round(kcal) + ' kcal at ' + round(g, 1) + ' g. Log ' +
+        'it as "1 serving", or by the gram when you weigh it.';
   }
 
   function saveFood() {
@@ -813,7 +835,7 @@
     // A weight the app suggested and the user never touched is a guess, not
     // a portion they have told us about, so it does not get saved as one.
     var engaged = !!$('svName').value.trim() || state.svTouched ||
-      grams !== Number(state.svPrefillGrams);
+      state.svFromData || grams !== Number(state.svPrefillGrams);
 
     var extras = collectPortions().filter(function (p) {
       return p.name.toLowerCase() !== unit;

@@ -396,6 +396,9 @@ CalTrack.off = (function () {
       name: name,
       grams: Math.round(grams * 100) / 100,
       fromVolume: fromVolume,
+      // How the packet words it - "2 sheets (31 g)". Shown to the user, never
+      // parsed into a portion name, because "2 sheets" is two of something.
+      label: String(product.serving_size || '').trim(),
       macros: servingMacrosFrom(product.nutriments || {})
     };
   }
