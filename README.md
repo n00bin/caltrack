@@ -35,8 +35,8 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   Don't know what a slice weighs? Press **Weigh**, put five on the scale, type
   5 and the reading, and it works out the rest.
 - **Foods** — your own library. Add, edit and delete. The nutrition form asks
-  for **one serving**, exactly as an American label writes it, and works out
-  the rest. There's a per-100 g mode for European labels.
+  for **one serving**, exactly as a label writes it, and works out the rest.
+  That is the only way in; per 100 g is storage, never something you type.
 - **Meals** — a saved list of food + quantity, tapped once instead of four
   times. Build one by picking from your library or by pressing **Scan one in**
   and pointing the camera at each packet in turn; anything new goes through
@@ -176,6 +176,21 @@ rather than quietly serve yesterday's answer.
 So: **everything works offline except barcode lookups**, which need the
 network by their nature. Settings has a line telling you whether the app is
 saved for offline use, and a button to force it to the newest version.
+
+### Shipping a change to the phone
+
+`sw.js` names its cache after the build, and **`tools/stamp.py` must be run
+before committing** — it writes the stamp into both `app.js` and `sw.js`:
+
+```
+python tools/stamp.py && git add -A && git commit -m "..." && git push
+```
+
+This is not decoration. The cache name was a fixed string for the first eight
+deploys, so the worker's `activate` never purged anything and the phone kept
+serving old code — two consecutive fixes appeared not to work because they
+never arrived. `test-shell.js` now fails if the stamp is missing, and Settings
+shows the running build so a bug report can name a version.
 
 ### The one external dependency
 

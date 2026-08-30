@@ -64,6 +64,21 @@ ok('icons are maskable, so Android does not letterbox them',
 ok('index.html links the manifest', /rel="manifest"/.test(html));
 ok('index.html has an apple-touch-icon', /apple-touch-icon/.test(html));
 
+/* The cache name must change with every build. It did not for eight
+ * deploys, so `activate` never purged anything and phones kept serving old
+ * code - two fixes in a row appeared not to work because they never landed.
+ * tools/stamp.py writes this; the test makes sure nobody unstamps it.
+ */
+const version = (sw.match(/const VERSION = '([^']+)'/) || [])[1] || '';
+ok('the cache name carries a build stamp, not a fixed name',
+  /\d{4}-\d{2}-\d{2}/.test(version), 'got ' + JSON.stringify(version) +
+  ' - run: python tools/stamp.py');
+const build = (fs.readFileSync(path.join(HERE, 'app.js'), 'utf8')
+  .match(/var BUILD = '([^']+)'/) || [])[1] || '';
+ok('app.js carries the same stamp', build && version.indexOf(build) !== -1,
+  'BUILD=' + JSON.stringify(build) + ' VERSION=' + JSON.stringify(version));
+ok('the build id is shown to the user', /id="buildId"/.test(html));
+
 // The service worker must not touch other people's servers.
 ok('the worker leaves other origins alone',
   /url\.origin !== self\.location\.origin/.test(sw));

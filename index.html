@@ -192,7 +192,8 @@
       <button id="clearBtn" class="btn wide danger">Erase all data</button>
     </div>
 
-    <p class="version">Calorie Tracker &middot; phase 1 (local only)</p>
+    <p class="version">Calorie Tracker &middot; build
+      <span id="buildId">unknown</span></p>
   </section>
 
 </main>
@@ -294,10 +295,6 @@
     <p id="foodNotes" class="notes" hidden></p>
 
     <h3>Nutrition</h3>
-    <div class="segmented" id="nutMode">
-      <button data-mode="serving" class="is-active">Per serving</button>
-      <button data-mode="per100">Per 100 g</button>
-    </div>
 
     <div id="servingPane">
       <p class="hint" id="svHint">Copy this straight off the label, exactly as
@@ -320,26 +317,11 @@
       <p id="svEcho" class="hint"></p>
     </div>
 
-    <div id="per100Pane" hidden>
-      <p class="hint">Most European labels are written this way. If yours is,
-        use these boxes instead.</p>
-      <div class="grid4">
-        <label class="field"><span>Calories</span>
-          <input type="number" id="fKcal" inputmode="decimal" step="any"></label>
-        <label class="field"><span>Protein g</span>
-          <input type="number" id="fProtein" inputmode="decimal" step="any"></label>
-        <label class="field"><span>Carbs g</span>
-          <input type="number" id="fCarbs" inputmode="decimal" step="any"></label>
-        <label class="field"><span>Fat g</span>
-          <input type="number" id="fFat" inputmode="decimal" step="any"></label>
-      </div>
-    </div>
-
-    <h3 id="portionsHead">Other ways you measure it
+    <h3>Other ways you measure it
       <span class="hint-inline">(optional)</span></h3>
-    <p class="hint" id="portionsHint">The serving above is already one way. Add
-      more if you measure it differently at different times - a cup as well as
-      a slice. Grams is always available without adding anything.</p>
+    <p class="hint">The serving above is already one way. Add more if you
+      measure it differently at different times - a cup as well as a slice.
+      Grams is always available without adding anything.</p>
     <div id="portionRows"></div>
     <button id="addPortionBtn" class="btn small">Add a portion</button>
 

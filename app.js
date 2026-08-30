@@ -3,6 +3,10 @@
 (function () {
   'use strict';
 
+  // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
+  // which version it is about.
+  var BUILD = '2026-08-30.1602+729069a';
+
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
 
@@ -24,7 +28,6 @@
     logAfterSave: false,
     segment: 'foods',        // Foods tab: foods or meals
     pickSegment: 'foods',    // the + sheet: foods or meals
-    nutMode: 'serving',      // how the food editor is asking for nutrition
     svPrefillGrams: '',      // the serving weight the app suggested
     refPer100: null,         // nutrition already known, from a scan or a save
     svTouched: false,        // has the user overridden the derived figures?
@@ -527,21 +530,11 @@
     notesEl.textContent = notes.join(' ');
 
     $('foodSheetTitle').textContent = isExisting ? 'Edit food' : 'New food';
-    // A zero that came from Open Food Facts usually means "not filled in",
-    // so leave the box empty rather than pretending the number is known.
-    function shown(v) {
-      if (v === undefined || v === null) return '';
-      return (v === 0 && !isExisting) ? '' : v;
-    }
     var per = (food && food.per_100g) || {};
 
     $('fName').value = food ? (food.name || '') : '';
     $('fBrand').value = food ? (food.brand || '') : '';
     $('fBarcode').value = food && food.barcode ? food.barcode : '';
-    $('fKcal').value = shown(per.kcal);
-    $('fProtein').value = shown(per.protein);
-    $('fCarbs').value = shown(per.carbs);
-    $('fFat').value = shown(per.fat);
 
     // "gram" is implicit and always available, so it is never listed.
     var named = (food && food.portions || []).filter(function (p) {
@@ -588,9 +581,8 @@
     }
 
     /* Whatever nutrition we already hold - from a scan, or from the saved
-     * food - becomes the REFERENCE. With a reference, the serving pane is
-     * only asking what one portion weighs, and fills the rest in itself.
-     * Without one, it is asking for the label.
+     * food - becomes the REFERENCE, so changing the portion weight can
+     * recalculate the figures instead of asking for them again.
      */
     state.refPer100 = (per.kcal > 0) ? {
       kcal: per.kcal, protein: per.protein || 0,
@@ -598,9 +590,8 @@
     } : null;
     state.svTouched = false;
 
-    // Always per serving. Per 100 g is now purely an opt-in for European
-    // labels, never somewhere the app dumps you.
-    setNutMode('serving');
+    updateServingHint();
+    updateServingEcho();
 
     // The serving is edited above, so only the extra ones are listed here.
     $('portionRows').innerHTML = '';
@@ -722,31 +713,6 @@
     return out;
   }
 
-  /* Which way round the nutrition is being typed. Per 100 g is how the app
-   * STORES food - it is the only unit that never goes ambiguous - but almost
-   * no American label is written that way, so it is not what anyone is asked
-   * for. The conversion happens here and is never the user's problem.
-   */
-  function setNutMode(mode) {
-    state.nutMode = mode;
-    $('servingPane').hidden = (mode !== 'serving');
-    $('per100Pane').hidden = (mode !== 'per100');
-    $('portionsHead').firstChild.textContent = (mode === 'serving')
-      ? 'Other ways you measure it ' : 'Portions ';
-    $('portionsHint').textContent = (mode === 'serving')
-      ? 'The serving above is already one way. Add more if you measure it ' +
-        'differently at different times - a cup as well as a slice. Grams is ' +
-        'always available without adding anything.'
-      : 'A slice, a cup, a bottle - whatever you would say out loud. Give each ' +
-        'one a weight in grams and you can log "2 slices" from then on. Grams ' +
-        'is always available.';
-    Array.prototype.forEach.call($('nutMode').querySelectorAll('button'), function (b) {
-      b.classList.toggle('is-active', b.dataset.mode === mode);
-    });
-    updateServingHint();
-    updateServingEcho();
-  }
-
   function updateServingHint() {
     var el = $('svHint');
     if (state.refPer100) {
@@ -754,9 +720,10 @@
         'only a starting point - change it to what one portion actually is, and ' +
         'the figures follow. Name it and you can log "2 slices" from then on.';
     } else {
-      el.textContent = "Copy this straight off the label, exactly as it's written. " +
-        'The serving weight in grams is printed there too, usually in brackets ' +
-        'right after the serving size - "1 slice (28g)".';
+      el.textContent = "Copy this straight off the label, exactly as it's " +
+        'written. The serving weight in grams is printed there too, usually in ' +
+        'brackets right after the serving size - "1 slice (28g)". If your label ' +
+        'is written per 100 g, put 100 in the weight box and copy it as it is.';
     }
   }
 
@@ -778,7 +745,6 @@
   // Shows the working, so the numbers are never a black box.
   function updateServingEcho() {
     var el = $('svEcho');
-    if (state.nutMode !== 'serving') { el.textContent = ''; return; }
     var g = parseFloat($('svGrams').value);
     var kcal = parseFloat($('svKcal').value);
     if (!(g > 0) || !isFinite(kcal)) { el.textContent = ''; return; }
@@ -794,58 +760,47 @@
     var name = $('fName').value.trim();
     if (!name) { showError(msg, 'Give the food a name.'); return; }
 
+    /* Nutrition is only ever typed per serving, because that is how every
+     * label is written. It is STORED per 100 g, because that is the only
+     * unit that makes "2 slices", "150 grams" and "a third of the pot" all
+     * work off one record. This is where one becomes the other.
+     */
+    var grams = parseFloat($('svGrams').value);
+    var sKcal = parseFloat($('svKcal').value);
+    var haveServing = (grams > 0) && isFinite(sKcal) && sKcal >= 0;
+    var unit = ($('svName').value.trim() || 'serving').toLowerCase();
+
+    // A weight the app suggested and the user never touched is a guess, not
+    // a portion they have told us about, so it does not get saved as one.
+    var engaged = !!$('svName').value.trim() || state.svTouched ||
+      grams !== Number(state.svPrefillGrams);
+
+    var extras = collectPortions().filter(function (p) {
+      return p.name.toLowerCase() !== unit;
+    });
+
     var per100, portions;
 
-    if (state.nutMode === 'serving') {
-      var grams = parseFloat($('svGrams').value);
-      var sKcal = parseFloat($('svKcal').value);
-      var haveServing = (grams > 0) && isFinite(sKcal) && sKcal >= 0;
-      var unit = ($('svName').value.trim() || 'serving').toLowerCase();
-      // A prefilled weight the user never touched is the app's guess,
-      // not a portion they have told us about.
-      var engaged = !!$('svName').value.trim() || state.svTouched ||
-        grams !== Number(state.svPrefillGrams);
-      var extras = collectPortions().filter(function (p) {
-        return p.name.toLowerCase() !== unit;
-      });
-
-      if (haveServing) {
-        // Same arithmetic as batch cooking, and tested in the same place.
-        per100 = nut.per100gFrom({
-          kcal: sKcal,
-          protein: parseFloat($('svProtein').value) || 0,
-          carbs: parseFloat($('svCarbs').value) || 0,
-          fat: parseFloat($('svFat').value) || 0
-        }, grams);
-        portions = engaged
-          ? [{ name: unit, grams: grams }].concat(extras)
-          : extras;
-      } else if (state.refPer100) {
-        // A scan with no portion given is still perfectly usable - it just
-        // gets logged by the gram until a weight is added.
-        per100 = state.refPer100;
-        portions = (grams > 0) ? [{ name: unit, grams: grams }].concat(extras) : extras;
-      } else if (grams > 0) {
-        showError(msg, 'Enter the calories in one ' + unit + '.');
-        return;
-      } else {
-        showError(msg, 'Enter what one serving weighs and what is in it, or ' +
-          'switch to Per 100 g if that is how your label is written.');
-        return;
-      }
+    if (haveServing) {
+      // Same arithmetic as batch cooking, and tested in the same place.
+      per100 = nut.per100gFrom({
+        kcal: sKcal,
+        protein: parseFloat($('svProtein').value) || 0,
+        carbs: parseFloat($('svCarbs').value) || 0,
+        fat: parseFloat($('svFat').value) || 0
+      }, grams);
+      portions = engaged ? [{ name: unit, grams: grams }].concat(extras) : extras;
+    } else if (state.refPer100) {
+      // Scanned, and the portion left alone. Perfectly usable - it just gets
+      // logged by the gram until a weight is added.
+      per100 = state.refPer100;
+      portions = (grams > 0) ? [{ name: unit, grams: grams }].concat(extras) : extras;
+    } else if (grams > 0) {
+      showError(msg, 'Enter the calories in one ' + unit + '.');
+      return;
     } else {
-      var kcal = parseFloat($('fKcal').value);
-      if (!isFinite(kcal) || kcal < 0) {
-        showError(msg, 'Enter the calories per 100 g.');
-        return;
-      }
-      per100 = {
-        kcal: kcal,
-        protein: parseFloat($('fProtein').value) || 0,
-        carbs: parseFloat($('fCarbs').value) || 0,
-        fat: parseFloat($('fFat').value) || 0
-      };
-      portions = collectPortions();
+      showError(msg, 'Enter what one serving weighs and what is in it.');
+      return;
     }
 
     var record = {
@@ -1721,16 +1676,25 @@
 
   function checkForUpdate() {
     var el = $('offlineState');
-    if (!('serviceWorker' in navigator)) { location.reload(); return; }
-    el.textContent = 'Looking...';
-    navigator.serviceWorker.getRegistration().then(function (reg) {
-      return reg ? reg.update() : null;
-    }).then(function () {
-      toast('Reloading with the latest version');
-      setTimeout(function () { location.reload(); }, 400);
-    }).catch(function () {
-      location.reload();
-    });
+    el.textContent = 'Fetching the latest version...';
+
+    // Empty the offline copy first. Without this the worker can keep serving
+    // the stored files whenever the network is merely slow, and an update
+    // never actually lands.
+    var wipe = ('caches' in window)
+      ? caches.keys().then(function (names) {
+          return Promise.all(names.map(function (n) { return caches.delete(n); }));
+        })
+      : Promise.resolve();
+
+    var reloadNow = function () { location.reload(); };
+
+    wipe.then(function () {
+      if (!('serviceWorker' in navigator)) return null;
+      return navigator.serviceWorker.getRegistration().then(function (reg) {
+        return reg ? reg.update() : null;
+      });
+    }).then(reloadNow, reloadNow);
   }
 
   function renderSettings() {
@@ -2038,10 +2002,6 @@
       if (ev.key === 'Enter') { ev.preventDefault(); saveWeighIn(); }
     });
     $('addPortionBtn').addEventListener('click', function () { addPortionRow(); });
-    $('nutMode').addEventListener('click', function (ev) {
-      var b = ev.target.closest('button[data-mode]');
-      if (b) setNutMode(b.dataset.mode);
-    });
     $('svGrams').addEventListener('input', function () {
       fillServingFromReference();
       updateServingEcho();
@@ -2069,6 +2029,7 @@
   }
 
   function init() {
+    $('buildId').textContent = BUILD;
     bind();
     registerServiceWorker();
     store.getSettings().then(function (s) {
