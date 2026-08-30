@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1745+c24e21d';
+  var BUILD = '2026-08-30.1750+be73b0f';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1673,30 +1673,65 @@
    * miss, or the product came back without a serving size, which is the
    * case that had the numbers disagreeing with the packet.
    */
+  /* USDA is the preferred source: labelNutrients is the printed panel, so
+   * its answer needs no derivation and no guessing. It is not the only
+   * source, because its coverage is thinner - across twelve US barcodes it
+   * knew three where Open Food Facts knew eight. So both are asked at once
+   * and USDA wins whenever it has an answer.
+   */
   function lookupBarcode(code, status) {
-    return CalTrack.off.lookup(code).then(function (offDraft) {
-      /* Look further when Open Food Facts cannot help, and also when what
-       * it returned is not believable. Chips Ahoy comes back with a 3 g
-       * serving, which is not a biscuit.
-       */
-      var g = offDraft && offDraft.serving && offDraft.serving.grams;
-      var implausible = g && (g < 5 || g > 1000);
-      if (!(!offDraft || !offDraft.serving || implausible)) return offDraft;
+    var key = CalTrack.usda.keyFor(state.settings);
 
-      // Free first: the same product is in Open Food Facts many times over
-      // and one of the copies usually carries the serving size.
+    if (status) {
+      status.textContent = key ? 'Looking it up...' : 'Asking Open Food Facts...';
+    }
+
+    // Declared before the closure that writes it, so the ordering is not
+    // quietly relying on hoisting.
+    var usdaError = null;
+
+    var offCall = CalTrack.off.lookup(code).catch(function () { return null; });
+    var usdaCall = key
+      ? CalTrack.usda.lookup(code, key).catch(function (err) {
+          usdaError = err;                       // reported, never fatal
+          return null;
+        })
+      : Promise.resolve(null);
+
+    return Promise.all([offCall, usdaCall]).then(function (both) {
+      var offDraft = both[0];
+      var usdaDraft = both[1];
+
+      // The printed label beats anything derived from a per-100 g figure.
+      if (usdaDraft && usdaDraft.usable) return mergeDrafts(offDraft, usdaDraft);
+
+      if (!offDraft) {
+        if (usdaError) throw usdaError;
+        return null;
+      }
+
+      // No USDA answer. Patch up what Open Food Facts gave us: a missing
+      // serving, or one that is not believable - Chips Ahoy comes back at
+      // 3 g, which is not a biscuit.
+      var g = offDraft.serving && offDraft.serving.grams;
+      var implausible = g && (g < 5 || g > 1000);
+      if (offDraft.serving && !implausible) return withKeyHint(offDraft, key);
+
       return borrowServing(offDraft, status).then(function (fixed) {
-        return fixed || askUsda(code, offDraft, status);
+        return withKeyHint(fixed || offDraft, key);
       });
-    }).catch(function (err) {
-      // Open Food Facts failed outright. USDA alone may still know it.
-      if (status) status.textContent = 'Open Food Facts is unreachable. Asking USDA...';
-      return CalTrack.usda.lookup(code, CalTrack.usda.keyFor(state.settings))
-        .then(function (usda) {
-          if (!usda || !usda.usable) throw err;
-          return usda;
-        });
     });
+  }
+
+  // Nudge towards a key exactly once: when a scan came up short without one.
+  function withKeyHint(draft, key) {
+    if (key || !draft || draft.serving) return draft;
+    draft.notes = (draft.notes || []).concat([
+      'USDA FoodData Central often has the serving size when Open Food Facts ' +
+      'does not. It needs a free key - Settings, "Second food database" - which ' +
+      'takes about thirty seconds and stays on this phone.'
+    ]);
+    return draft;
   }
 
   /* Take the serving from a duplicate entry for the same product. Needs no
@@ -1732,39 +1767,21 @@
       .catch(function () { return null; });   // a failed guess is not an error
   }
 
-  function askUsda(code, offDraft, status) {
-    if (!CalTrack.usda.keyFor(state.settings)) return Promise.resolve(offDraft);
-    if (status) status.textContent = 'Still nothing. Asking USDA...';
-    return CalTrack.usda.lookup(code, CalTrack.usda.keyFor(state.settings))
-      .then(function (usda) {
-        if (!usda || !usda.usable) return offDraft;
-        return mergeDrafts(offDraft, usda);
-      })
-      .catch(function (err) {
-        // USDA failing must never cost what Open Food Facts already found.
-        if (!offDraft) throw err;
-        offDraft.notes = (offDraft.notes || []).concat([
-          'USDA was not reachable for a second opinion: ' + err.message
-        ]);
-        return offDraft;
-      });
-  }
-
   /* USDA wins on the serving and the nutrition, because labelNutrients is
    * the printed panel rather than a conversion of it. Open Food Facts
    * usually wins on the name - USDA descriptions are shouty and often
-   * repeat themselves.
+   * repeat themselves ("HONEY GRAHAM CRACKERS, HONEY").
    */
   function mergeDrafts(off, usda) {
     if (!off) return usda;
-    // Keep a believable OFF serving over a USDA one; only replace a bad one.
-    var g = off.serving && off.serving.grams;
-    if (g && g >= 5 && g <= 1000) return off;
     var merged = Object.assign({}, usda);
     if (off.name) merged.name = off.name;
     if (off.brand) merged.brand = off.brand;
-    merged.notes = ['The serving size and nutrition here come from USDA, ' +
-      'which stores the label as printed.']
+    merged.notes = ['Serving size and nutrition from USDA, which stores the ' +
+      'label as printed.' + (off.serving && Math.abs(off.serving.grams - usda.serving.grams) > 0.5
+        ? ' Open Food Facts said ' + off.serving.grams + ' g for the same product; ' +
+          'the packet decides.'
+        : '')]
       .concat(usda.notes || [])
       .concat((off.notes || []).filter(function (n) {
         // OFF's "no serving size" complaint is moot now that USDA supplied one.

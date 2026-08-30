@@ -172,16 +172,16 @@
     </div>
 
     <div class="card">
-      <h2>Second food database</h2>
-      <p class="hint">Scanning already works without this. Open Food Facts
-        needs no setup, and when its entry has no serving size the app borrows
-        one from a duplicate entry for the same product - no key involved.</p>
-      <p class="hint">USDA FoodData Central is the backstop for what that
-        misses: two million US branded items with the nutrition panel exactly
-        as printed. It needs a free key, which takes about thirty seconds to
-        get and stays on this phone - it is never sent anywhere but USDA, and
-        never committed to the repository.</p>
-      <label class="field"><span>USDA key (optional)</span>
+      <h2>USDA lookups &mdash; worth setting up</h2>
+      <p class="hint"><b>Add a key and scanning gets noticeably better.</b>
+        USDA FoodData Central stores the nutrition panel exactly as printed on
+        the packet, so a scan needs no guessing at all. It is asked alongside
+        Open Food Facts on every scan and its answer wins whenever it has one.</p>
+      <p class="hint">The key is free, takes about thirty seconds, and stays on
+        this phone - it is only ever sent to USDA, and is never committed to
+        the repository. Without one the app still works: Open Food Facts covers
+        more products, it just often lacks the serving size.</p>
+      <label class="field"><span>USDA key</span>
         <input type="text" id="usdaKey" autocomplete="off" spellcheck="false"
                placeholder="leave blank to use the shared key"></label>
       <button id="saveUsdaKey" class="btn primary wide">Save key</button>

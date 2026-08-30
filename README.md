@@ -65,7 +65,32 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
 - **Settings** — a daily calorie target, a goal weight, the rate you're aiming
   for, plus backup export/restore.
 
-## Two food databases
+## Two food databases, USDA preferred
+
+**Both are asked at once on every scan, and USDA's answer wins whenever it
+has one.** USDA FoodData Central returns `labelNutrients` — the nutrition
+panel exactly as printed — so nothing has to be derived or guessed. Open Food
+Facts stores per-100 g figures, which is a conversion of the label rather than
+the label.
+
+USDA is not the only source because its coverage is thinner. Across twelve US
+barcodes it knew three; Open Food Facts knew eight. Asking both in parallel
+costs nothing and loses neither.
+
+The chain, in order, per scan:
+
+1. **USDA**, if a key is set — the printed panel, used verbatim
+2. **Open Food Facts** by barcode — if its serving is present and believable
+3. **Open Food Facts by name** — borrow the serving from a duplicate entry
+   whose per-100 g nutrition matches to within 1%
+4. **Infer it** — when the per-100 g decimals divide exactly by a plausible
+   serving weight, that is the serving someone typed in
+5. Empty boxes and a prompt to read the packet
+
+Measured over those twelve barcodes, 7 arrive with a usable serving and the
+rest are typed once.
+
+
 
 **Open Food Facts** is asked first: free, no key, no setup, and it covers the
 world. **USDA FoodData Central** is asked second, and only when it can help —
