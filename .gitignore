@@ -1,0 +1,11 @@
+# OS / editor junk
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# nothing here needs a build step, so nothing to ignore beyond that
+
+# the build plan stays local - it has personal context in it
+PLAN.md

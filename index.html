@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<title>Calorie Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="datenav">
+    <button id="prevDay" class="iconbtn" aria-label="Previous day">&#8249;</button>
+    <button id="dayLabel" class="daylabel" aria-label="Change date">Today</button>
+    <button id="nextDay" class="iconbtn" aria-label="Next day">&#8250;</button>
+  </div>
+  <input type="date" id="datePicker" class="visually-hidden" aria-label="Pick a date">
+</header>
+
+<main>
+
+  <!-- ================= TODAY ================= -->
+  <section id="view-today" class="view">
+
+    <div class="summary">
+      <div class="kcal">
+        <span id="kcalTotal">0</span>
+        <span class="unit">kcal</span>
+      </div>
+      <div id="kcalTarget" class="target"></div>
+      <div class="macros">
+        <div><b id="mProtein">0</b><span>g protein</span></div>
+        <div><b id="mCarbs">0</b><span>g carbs</span></div>
+        <div><b id="mFat">0</b><span>g fat</span></div>
+      </div>
+    </div>
+
+    <div id="logList"></div>
+
+  </section>
+
+  <!-- ================= FOODS ================= -->
+  <section id="view-foods" class="view" hidden>
+    <div class="rowbar">
+      <input type="search" id="foodFilter" placeholder="Search your foods" autocomplete="off">
+      <button id="foodsScanBtn" class="btn" aria-label="Scan a barcode">Scan</button>
+      <button id="newFoodBtn" class="btn primary">New</button>
+    </div>
+    <div id="foodList"></div>
+  </section>
+
+  <!-- ================ SETTINGS =============== -->
+  <section id="view-settings" class="view" hidden>
+    <div class="card">
+      <h2>Daily target</h2>
+      <label class="field">
+        <span>Target calories</span>
+        <input type="number" id="setTargetKcal" inputmode="numeric" placeholder="e.g. 2000">
+      </label>
+      <label class="field">
+        <span>Goal weight (lbs)</span>
+        <input type="number" id="setGoalWeight" inputmode="decimal" placeholder="optional">
+      </label>
+      <button id="saveSettingsBtn" class="btn primary wide">Save</button>
+      <p id="settingsMsg" class="msg"></p>
+    </div>
+
+    <div class="card">
+      <h2>Backup</h2>
+      <p class="hint">Your data lives in this browser only. If you clear site
+        data or switch phones it is gone, so export a copy now and then.</p>
+      <button id="exportBtn" class="btn wide">Export a backup file</button>
+      <button id="importBtn" class="btn wide">Restore from a backup file</button>
+      <input type="file" id="importFile" accept="application/json,.json" class="visually-hidden">
+      <p id="backupMsg" class="msg"></p>
+    </div>
+
+    <div class="card danger">
+      <h2>Danger zone</h2>
+      <button id="clearBtn" class="btn wide danger">Erase all data</button>
+    </div>
+
+    <p class="version">Calorie Tracker &middot; phase 1 (local only)</p>
+  </section>
+
+</main>
+
+<button id="fab" class="fab" aria-label="Log food">+</button>
+
+<nav class="tabs">
+  <button class="tab is-active" data-view="today">Today</button>
+  <button class="tab" data-view="foods">Foods</button>
+  <button class="tab" data-view="settings">Settings</button>
+</nav>
+
+<!-- ============== SHEET: pick a food ============== -->
+<div id="pickSheet" class="sheet" hidden>
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2>Log food</h2>
+      <button class="iconbtn close" data-close aria-label="Close">&times;</button>
+    </div>
+
+    <div class="mealtimes" id="mealTimePicker">
+      <button data-meal="breakfast">Breakfast</button>
+      <button data-meal="lunch">Lunch</button>
+      <button data-meal="dinner">Dinner</button>
+      <button data-meal="snack">Snack</button>
+    </div>
+
+    <div class="rowbar">
+      <input type="search" id="pickSearch" placeholder="Search food" autocomplete="off">
+      <button id="pickScanBtn" class="btn">Scan</button>
+    </div>
+    <div id="pickResults" class="picklist"></div>
+    <button id="pickNewFood" class="btn wide">Add a food that isn't here yet</button>
+  </div>
+</div>
+
+<!-- ============== SHEET: quantity ============== -->
+<div id="qtySheet" class="sheet" hidden>
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2 id="qtyFoodName">Food</h2>
+      <button class="iconbtn close" data-close aria-label="Close">&times;</button>
+    </div>
+    <div class="qtyrow">
+      <input type="number" id="qtyAmount" inputmode="decimal" step="any" value="1">
+      <select id="qtyPortion"></select>
+    </div>
+    <p id="qtyPreview" class="preview"></p>
+    <button id="qtyConfirm" class="btn primary wide">Add to log</button>
+  </div>
+</div>
+
+<!-- ============== SHEET: barcode scanner ============== -->
+<div id="scanSheet" class="sheet" hidden>
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2>Scan a barcode</h2>
+      <button class="iconbtn close" data-close aria-label="Close">&times;</button>
+    </div>
+    <div class="scanstage">
+      <div id="scanStage" class="scanvideo"></div>
+      <div class="reticle"></div>
+    </div>
+    <p id="scanStatus" class="msg"></p>
+    <details id="manualBox" class="helper">
+      <summary>Type the number instead</summary>
+      <div class="helper-body">
+        <p>Every barcode has its digits printed underneath it.</p>
+        <div class="qtyrow">
+          <input type="text" id="manualCode" inputmode="numeric"
+                 autocomplete="off" placeholder="012345678905">
+          <button id="manualGo" class="btn primary">Look up</button>
+        </div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- ============== SHEET: food editor ============== -->
+<div id="foodSheet" class="sheet" hidden>
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2 id="foodSheetTitle">New food</h2>
+      <button class="iconbtn close" data-close aria-label="Close">&times;</button>
+    </div>
+
+    <label class="field"><span>Name</span>
+      <input type="text" id="fName" placeholder="Butterbread"></label>
+    <label class="field"><span>Brand</span>
+      <input type="text" id="fBrand" placeholder="Nature's Own"></label>
+    <label class="field"><span>Barcode</span>
+      <input type="text" id="fBarcode" inputmode="numeric" placeholder="optional"></label>
+    <p id="foodNotes" class="notes" hidden></p>
+
+    <h3>Per 100 g <span class="hint-inline">(off the nutrition label)</span></h3>
+    <div class="grid4">
+      <label class="field"><span>Calories</span>
+        <input type="number" id="fKcal" inputmode="decimal" step="any"></label>
+      <label class="field"><span>Protein g</span>
+        <input type="number" id="fProtein" inputmode="decimal" step="any"></label>
+      <label class="field"><span>Carbs g</span>
+        <input type="number" id="fCarbs" inputmode="decimal" step="any"></label>
+      <label class="field"><span>Fat g</span>
+        <input type="number" id="fFat" inputmode="decimal" step="any"></label>
+    </div>
+    <details class="helper">
+      <summary>The label is per serving, not per 100 g</summary>
+      <div class="helper-body">
+        <p>Type the serving figures here and the weight of one serving, then
+          press Convert. It will do the maths and fill the boxes above.</p>
+        <div class="grid4">
+          <label class="field"><span>Serving g</span>
+            <input type="number" id="cvGrams" inputmode="decimal" step="any"></label>
+          <label class="field"><span>Calories</span>
+            <input type="number" id="cvKcal" inputmode="decimal" step="any"></label>
+          <label class="field"><span>Protein g</span>
+            <input type="number" id="cvProtein" inputmode="decimal" step="any"></label>
+          <label class="field"><span>Carbs g</span>
+            <input type="number" id="cvCarbs" inputmode="decimal" step="any"></label>
+          <label class="field"><span>Fat g</span>
+            <input type="number" id="cvFat" inputmode="decimal" step="any"></label>
+        </div>
+        <button id="convertBtn" class="btn">Convert to per 100 g</button>
+      </div>
+    </details>
+
+    <h3>Portions <span class="hint-inline">(how you actually count it)</span></h3>
+    <p class="hint">A slice, a cup, a bottle - whatever you'd say out loud.
+      Give each one a weight in grams and you can log "2 slices" forever after.
+      Grams is always available.</p>
+    <div id="portionRows"></div>
+    <button id="addPortionBtn" class="btn small">Add a portion</button>
+
+    <div class="sheet-actions">
+      <button id="deleteFoodBtn" class="btn danger" hidden>Delete</button>
+      <button id="saveFoodBtn" class="btn primary">Save food</button>
+    </div>
+    <p id="foodMsg" class="msg"></p>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="store.js"></script>
+<script src="scan.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,357 @@
+/* style.css — mobile first. Big tap targets, thumb-reachable actions. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eceef1;
+  --line: #d9dce1;
+  --text: #16191d;
+  --muted: #666e79;
+  --accent: #2f7d4f;
+  --accent-text: #ffffff;
+  --danger: #b3261e;
+  --radius: 14px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418;
+    --surface: #1a1e24;
+    --surface-2: #232830;
+    --line: #333a44;
+    --text: #e8eaed;
+    --muted: #9aa3ae;
+    --accent: #4caf7d;
+    --accent-text: #07130d;
+    --danger: #f2635a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: calc(140px + var(--safe-bottom));
+  -webkit-text-size-adjust: 100%;
+}
+
+h2 { font-size: 1rem; margin: 0 0 12px; }
+h3 { font-size: .9rem; margin: 20px 0 8px; }
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+/* ---------- top bar ---------- */
+
+.topbar {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 12px;
+}
+
+.datenav { display: flex; align-items: center; justify-content: center; gap: 4px; }
+
+.daylabel {
+  flex: 1; max-width: 260px;
+  background: none; border: 0; color: var(--text);
+  font: inherit; font-weight: 600; font-size: 1.05rem;
+  padding: 8px; cursor: pointer;
+}
+
+.iconbtn {
+  background: none; border: 0; color: var(--muted);
+  font-size: 1.6rem; line-height: 1;
+  width: 44px; height: 44px; cursor: pointer;
+}
+
+/* ---------- layout ---------- */
+
+main { padding: 12px; max-width: 640px; margin: 0 auto; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.card.danger { border-color: var(--danger); }
+
+/* ---------- summary ---------- */
+
+.summary {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 16px;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.kcal { font-size: 2.6rem; font-weight: 700; line-height: 1; }
+.kcal .unit { font-size: .95rem; font-weight: 500; color: var(--muted); margin-left: 6px; }
+.target { color: var(--muted); font-size: .9rem; margin-top: 6px; min-height: 1.2em; }
+.target.over { color: var(--danger); }
+
+.macros {
+  display: flex; justify-content: space-around;
+  margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.macros div { display: flex; flex-direction: column; }
+.macros b { font-size: 1.1rem; }
+.macros span { font-size: .75rem; color: var(--muted); }
+
+/* ---------- log ---------- */
+
+.mealgroup { margin-bottom: 14px; }
+
+.mealhead {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 0 4px 6px;
+  font-size: .8rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.entry {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 6px;
+}
+
+.entry-main { flex: 1; min-width: 0; }
+.entry-name { font-weight: 600; }
+.entry-sub { font-size: .8rem; color: var(--muted); }
+.entry-kcal { font-weight: 600; white-space: nowrap; }
+
+.entry .del {
+  background: none; border: 0; color: var(--muted);
+  font-size: 1.3rem; width: 36px; height: 36px; cursor: pointer;
+}
+.entry .del:hover { color: var(--danger); }
+
+.empty {
+  text-align: center; color: var(--muted);
+  padding: 36px 20px; font-size: .95rem;
+}
+
+/* ---------- foods list ---------- */
+
+.rowbar { display: flex; gap: 8px; margin-bottom: 12px; }
+.rowbar input { flex: 1; }
+
+.fooditem {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px; margin-bottom: 6px;
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.fooditem .fi-main { flex: 1; min-width: 0; }
+.fooditem .fi-name { font-weight: 600; }
+.fooditem .fi-sub { font-size: .8rem; color: var(--muted); }
+
+/* ---------- forms ---------- */
+
+input, select, textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font: inherit;
+  padding: 11px 12px;
+  width: 100%;
+  min-height: 44px;
+}
+
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.field { display: block; margin-bottom: 10px; }
+.field > span {
+  display: block; font-size: .78rem; color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.btn {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font: inherit; font-weight: 600;
+  padding: 12px 16px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.danger { color: var(--danger); border-color: var(--danger); background: none; }
+.btn.wide { display: block; width: 100%; margin-top: 8px; }
+.btn.small { padding: 8px 12px; min-height: 38px; font-size: .85rem; }
+
+.hint { color: var(--muted); font-size: .82rem; margin: 0 0 10px; }
+.hint-inline { color: var(--muted); font-weight: 400; font-size: .78rem; }
+.msg { font-size: .85rem; color: var(--muted); min-height: 1.2em; margin: 8px 0 0; }
+.msg.err { color: var(--danger); }
+.version { text-align: center; color: var(--muted); font-size: .75rem; }
+
+.helper { margin: 10px 0 4px; }
+.helper summary { cursor: pointer; color: var(--muted); font-size: .85rem; padding: 6px 0; }
+.helper-body { padding-top: 8px; }
+.helper-body p { font-size: .82rem; color: var(--muted); margin-top: 0; }
+
+.portionrow { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.portionrow input:first-child { flex: 2; }
+.portionrow input:nth-child(2) { flex: 1; }
+.portionrow button {
+  background: none; border: 0; color: var(--muted);
+  font-size: 1.3rem; width: 40px; height: 44px; cursor: pointer;
+}
+
+/* ---------- fab + tabs ---------- */
+
+.fab {
+  position: fixed; right: 18px;
+  bottom: calc(74px + var(--safe-bottom));
+  width: 58px; height: 58px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text);
+  border: 0; font-size: 2rem; line-height: 1;
+  box-shadow: 0 4px 14px rgba(0,0,0,.3);
+  cursor: pointer; z-index: 6;
+}
+
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: var(--safe-bottom);
+}
+.tab {
+  flex: 1; background: none; border: 0;
+  color: var(--muted); font: inherit; font-size: .8rem;
+  padding: 16px 4px; cursor: pointer;
+}
+.tab.is-active { color: var(--accent); font-weight: 700; }
+
+/* ---------- sheets ---------- */
+
+.sheet {
+  position: fixed; inset: 0; z-index: 20;
+  background: rgba(0,0,0,.5);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.sheet[hidden] { display: none; }
+
+.sheet-panel {
+  background: var(--bg);
+  width: 100%; max-width: 640px;
+  max-height: 92vh; overflow-y: auto;
+  border-radius: 18px 18px 0 0;
+  padding: 16px 16px calc(24px + var(--safe-bottom));
+}
+
+.sheet-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.sheet-head h2 { margin: 0; font-size: 1.1rem; }
+
+.mealtimes { display: flex; gap: 6px; margin-bottom: 12px; }
+.mealtimes button {
+  flex: 1; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font: inherit; font-size: .8rem;
+  padding: 9px 4px; min-height: 40px; cursor: pointer;
+}
+.mealtimes button.is-active {
+  background: var(--accent); border-color: var(--accent);
+  color: var(--accent-text); font-weight: 700;
+}
+
+.picklist { margin-top: 10px; max-height: 46vh; overflow-y: auto; }
+
+.qtyrow { display: flex; gap: 8px; }
+.qtyrow input { flex: 1; font-size: 1.4rem; text-align: center; }
+.qtyrow select { flex: 1.4; }
+
+.preview {
+  text-align: center; color: var(--muted);
+  font-size: .9rem; margin: 14px 0;
+  min-height: 2.6em;
+}
+.preview b { color: var(--text); font-size: 1.5rem; }
+
+.sheet-actions { display: flex; gap: 8px; margin-top: 20px; }
+.sheet-actions .btn { flex: 1; }
+
+/* ---------- scanner ---------- */
+
+.scanstage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+/* The video is built and torn down by scan.js, so it gets its own box and
+   the aiming frame sits above it untouched. */
+.scanvideo { position: absolute; inset: 0; }
+.scanvideo video {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* A window to aim through. Barcodes are wide and short, so this is too. */
+.reticle {
+  position: absolute; left: 8%; right: 8%; top: 30%; bottom: 30%;
+  border: 2px solid rgba(255,255,255,.85);
+  border-radius: 8px;
+  box-shadow: 0 0 0 100vmax rgba(0,0,0,.35);
+  pointer-events: none;
+}
+
+.notes {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: .82rem;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+}
+.notes[hidden] { display: none; }
+
+/* ---------- toast ---------- */
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(90px + var(--safe-bottom)); z-index: 40;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: .88rem;
+  box-shadow: 0 4px 14px rgba(0,0,0,.3);
+  max-width: 90vw;
+}
+.toast[hidden] { display: none; }
