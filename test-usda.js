@@ -106,9 +106,19 @@ ok('different codes do not match', !usda._sameCode('842798105464', '842798105465
 ok('empty matches nothing', !usda._sameCode('', ''));
 ok('null matches nothing', !usda._sameCode(null, '123'));
 
-// --- no key, no call ----------------------------------------------------
-usda.lookup('842798105464', null).then(function (r) {
-  eq('without a key it stays quiet rather than erroring', r, null);
-  console.log(fails === 0 ? '\nALL PASS' : '\n' + fails + ' FAILED');
-  process.exit(fails ? 1 : 0);
-});
+// --- which key gets used ------------------------------------------------
+// The key comes from Settings and nowhere else - nothing is committed to
+// this repository. Nothing here touches the network; the suite runs offline.
+eq('the key from Settings is used', usda.keyFor({ usda_api_key: 'mine-goes-here' }), 'mine-goes-here');
+eq('blank is no key', usda.keyFor({ usda_api_key: '   ' }), null);
+eq('no key configured', usda.keyFor({}), null);
+eq('no settings at all', usda.keyFor(null), null);
+
+// No key must mean no request, not a request that fails.
+var called = false;
+globalThis.fetch = function () { called = true; return Promise.reject(new Error('should not run')); };
+usda.lookup('842798105464', null);
+ok('without a key it never calls out', !called);
+
+console.log(fails === 0 ? '\nALL PASS' : '\n' + fails + ' FAILED');
+process.exit(fails ? 1 : 0);

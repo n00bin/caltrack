@@ -536,6 +536,58 @@ CalTrack.off = (function () {
     return best;
   }
 
+  /* Borrow a serving size from a duplicate entry.
+   *
+   * The same product gets added to Open Food Facts over and over, once per
+   * shop that stocks it, and the copies disagree about what they record. The
+   * barcode you scanned may have no serving size while an identical entry
+   * three rows down has "2 sheets (31 g)".
+   *
+   * Matching by name alone would be reckless - "honey graham crackers" finds
+   * a dozen different biscuits. So the per-100 g nutrition has to agree too:
+   * if two entries claim the same calories to within 1%, they are the same
+   * food, and the serving from one is good for the other. It needs no key,
+   * and is tried before anything that does.
+   */
+  var SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
+
+  function searchByName(name) {
+    var url = SEARCH_URL + '?search_terms=' + encodeURIComponent(name) +
+      '&search_simple=1&action=process&json=1&page_size=20' +
+      '&fields=product_name,serving_size,serving_quantity,serving_quantity_unit,nutriments';
+    return fetch(url).then(function (res) {
+      if (!res.ok) return [];
+      // This endpoint answers with an HTML error page when it is unhappy.
+      return res.json().then(function (d) { return (d && d.products) || []; },
+                             function () { return []; });
+    }).catch(function () { return []; });   // never let this break a scan
+  }
+
+  function findServingByName(name, per100) {
+    if (!name || !per100 || !(per100.kcal > 0)) return Promise.resolve(null);
+
+    return searchByName(name).then(function (products) {
+      var agreed = 0;
+      var found = null;
+
+      products.forEach(function (p) {
+        var n = p.nutriments || {};
+        var kcal = num(n['energy-kcal_100g']);
+        if (!kcal) return;
+        if (Math.abs(kcal - per100.kcal) / per100.kcal > 0.01) return;   // different food
+
+        agreed++;
+        if (found) return;
+        var sv = servingFrom(p);
+        if (sv && sv.grams >= 5 && sv.grams <= 1000) found = sv;
+      });
+
+      if (!found) return null;
+      found.borrowedFrom = agreed;
+      return found;
+    });
+  }
+
   // Resolves to a draft food, or null when the product is not in the database.
   function lookup(barcode) {
     var code = String(barcode).trim();
@@ -551,6 +603,8 @@ CalTrack.off = (function () {
     // exported for the tests
     _parseServing: parseServing,
     _servingFrom: servingFrom,
+    _searchByName: searchByName,
+    findServingByName: findServingByName,
     inferServing: inferServing,
     _servingMacrosFrom: servingMacrosFrom,
     _draftFrom: draftFrom,

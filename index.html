@@ -173,19 +173,21 @@
 
     <div class="card">
       <h2>Second food database</h2>
-      <p class="hint">Open Food Facts is free and needs no setup, but it is
-        thin on American groceries and often has a product without its serving
-        size. USDA FoodData Central covers about two million US branded items
-        and gives the nutrition panel exactly as it is printed. It needs a free
-        key, which takes about thirty seconds to get and stays on this phone -
-        it is never sent anywhere but USDA.</p>
-      <label class="field"><span>USDA API key</span>
+      <p class="hint">Scanning already works without this. Open Food Facts
+        needs no setup, and when its entry has no serving size the app borrows
+        one from a duplicate entry for the same product - no key involved.</p>
+      <p class="hint">USDA FoodData Central is the backstop for what that
+        misses: two million US branded items with the nutrition panel exactly
+        as printed. It needs a free key, which takes about thirty seconds to
+        get and stays on this phone - it is never sent anywhere but USDA, and
+        never committed to the repository.</p>
+      <label class="field"><span>USDA key (optional)</span>
         <input type="text" id="usdaKey" autocomplete="off" spellcheck="false"
-               placeholder="paste it here"></label>
+               placeholder="leave blank to use the shared key"></label>
       <button id="saveUsdaKey" class="btn primary wide">Save key</button>
-      <button id="testUsdaKey" class="btn wide">Test it</button>
+      <button id="testUsdaKey" class="btn wide">Test the lookup</button>
       <p id="usdaMsg" class="msg"></p>
-      <p class="hint">Get one at
+      <p class="hint">Free keys come from
         <a id="usdaSignup" href="https://fdc.nal.usda.gov/api-key-signup.html"
            target="_blank" rel="noopener">fdc.nal.usda.gov</a>.</p>
     </div>

@@ -79,10 +79,25 @@ serving size at all — it gives a 31 g serving described as "2 full", at
 130 kcal, 2 g protein, 24 g carbs and 3 g fat. Nothing derived, nothing
 inferred.
 
-It needs a free key from [fdc.nal.usda.gov](https://fdc.nal.usda.gov/api-key-signup.html),
-entered in Settings. **The key is never committed** — anything in a public
-repo is readable by everyone and would be someone else's rate limit inside a
-week. Without a key the app behaves exactly as it did before.
+**Before it asks USDA it asks Open Food Facts twice.** The same product is
+added to OFF over and over, once per shop that stocks it, and the copies
+disagree about what they record — the barcode you scanned may have no serving
+size while an identical entry three rows down says "2 sheets (31 g)". So when
+a scan comes back without one, the app searches by name and borrows the
+serving from a duplicate. Matching on the name alone would be reckless, so
+the per-100 g nutrition has to agree to within 1% as well: same calories,
+same food. That needs no key.
+
+For barcode `842798105464` that recovers 31 g from five agreeing entries, and
+turns the scan into 130 kcal, 2 g protein, 24 g carbs, 3 g fat — the packet
+exactly. OFF's search endpoint is rate-limited to roughly ten requests a
+minute; when it throttles, the app falls through to USDA rather than failing.
+
+USDA needs a free key from
+[fdc.nal.usda.gov](https://fdc.nal.usda.gov/api-key-signup.html), entered in
+Settings. **The key is never committed** — this repo is public, keys on public
+pages are scraped within days, and it would become a stranger's rate limit.
+Without one the app simply stops at the two free steps above.
 
 When both answer, USDA wins on the serving and the nutrition, and Open Food
 Facts wins on the name — USDA descriptions are shouty and tend to repeat

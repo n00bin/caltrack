@@ -16,7 +16,7 @@
  * honestly rather than quietly serving yesterday's answer.
  */
 
-const VERSION = 'caltrack-2026-08-30.1701+f29f300';
+const VERSION = 'caltrack-2026-08-30.1739+5b0e915';
 const TIMEOUT_MS = 3000;
 
 const SHELL = [

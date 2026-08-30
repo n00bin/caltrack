@@ -9,9 +9,14 @@
  * protein, carbohydrates and fat for one serving, alongside `servingSize`
  * in grams. Nothing to derive and nothing to infer.
  *
- * It needs a free API key. That key lives in the user's own settings, never
- * in this repository — anything committed to a public repo is readable by
- * everyone and would be someone else's rate limit within a week.
+ * It needs a free API key, which lives in the user's own settings and is
+ * never committed here - this repository is public, and a key on a public
+ * page is scraped within days and becomes a stranger's rate limit.
+ *
+ * Most scans never get this far. Open Food Facts is asked first, and when
+ * its entry has no serving size the app borrows one from a duplicate entry
+ * for the same product, which needs no key at all. USDA is the backstop for
+ * what that misses.
  */
 window.CalTrack = window.CalTrack || {};
 
@@ -22,6 +27,12 @@ CalTrack.usda = (function () {
   var DETAIL = 'https://api.nal.usda.gov/fdc/v1/food/';
   var TIMEOUT_MS = 12000;
   var SIGNUP_URL = 'https://fdc.nal.usda.gov/api-key-signup.html';
+
+  // Whatever key the user has put in Settings, or nothing.
+  function keyFor(settings) {
+    var own = settings && settings.usda_api_key;
+    return (own && String(own).trim()) || null;
+  }
 
   function num(v) {
     var n = parseFloat(v);
@@ -49,7 +60,9 @@ CalTrack.usda = (function () {
           throw new Error('USDA is rate-limiting your key. Try again in a little while.');
         }
         if (!res.ok) throw new Error('USDA answered with an error (' + res.status + ').');
-        return res.json();
+        return res.json().catch(function () {
+          throw new Error('USDA sent something that was not JSON.');
+        });
       })
       .catch(function (e) {
         clearTimeout(timer);
@@ -158,9 +171,11 @@ CalTrack.usda = (function () {
    * barcode is not in FDC.
    */
   function lookup(barcode, apiKey) {
-    if (!apiKey) return Promise.resolve(null);
+    if (!apiKey) return Promise.resolve(null);   // no key, no call
     var code = String(barcode).replace(/\D/g, '');
-    var url = SEARCH + '?query=' + encodeURIComponent('"' + code + '"') +
+    // No quotes around the barcode: FDC answers a quoted query with a bare
+    // nginx 400 before it reaches the API at all.
+    var url = SEARCH + '?query=' + encodeURIComponent(code) +
       '&dataType=Branded&pageSize=10&api_key=' + encodeURIComponent(apiKey);
 
     return fetchJson(url).then(function (data) {
@@ -177,6 +192,7 @@ CalTrack.usda = (function () {
 
   return {
     SIGNUP_URL: SIGNUP_URL,
+    keyFor: keyFor,
     lookup: lookup,
     _draftFrom: draftFrom,
     _servingGrams: servingGrams,

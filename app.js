@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1701+f29f300';
+  var BUILD = '2026-08-30.1739+5b0e915';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1683,33 +1683,79 @@
    */
   function lookupBarcode(code, status) {
     return CalTrack.off.lookup(code).then(function (offDraft) {
-      var key = state.settings.usda_api_key;
-      var needsMore = !offDraft || !offDraft.serving;
-      if (!key || !needsMore) return offDraft;
+      /* Look further when Open Food Facts cannot help, and also when what
+       * it returned is not believable. Chips Ahoy comes back with a 3 g
+       * serving, which is not a biscuit.
+       */
+      var g = offDraft && offDraft.serving && offDraft.serving.grams;
+      var implausible = g && (g < 5 || g > 1000);
+      if (!(!offDraft || !offDraft.serving || implausible)) return offDraft;
 
-      if (status) status.textContent = 'Open Food Facts came up short. Asking USDA...';
+      // Free first: the same product is in Open Food Facts many times over
+      // and one of the copies usually carries the serving size.
+      return borrowServing(offDraft, status).then(function (fixed) {
+        return fixed || askUsda(code, offDraft, status);
+      });
+    }).catch(function (err) {
+      // Open Food Facts failed outright. USDA alone may still know it.
+      if (status) status.textContent = 'Open Food Facts is unreachable. Asking USDA...';
+      return CalTrack.usda.lookup(code, CalTrack.usda.keyFor(state.settings))
+        .then(function (usda) {
+          if (!usda || !usda.usable) throw err;
+          return usda;
+        });
+    });
+  }
 
-      return CalTrack.usda.lookup(code, key).then(function (usda) {
+  /* Take the serving from a duplicate entry for the same product. Needs no
+   * key, so it is tried before anything that does.
+   */
+  function borrowServing(offDraft, status) {
+    if (!offDraft || !offDraft.name) return Promise.resolve(null);
+    if (status) status.textContent = 'That entry has no serving size. Checking duplicates...';
+
+    return CalTrack.off.findServingByName(offDraft.name, offDraft.per_100g)
+      .then(function (sv) {
+        if (!sv) return null;
+        var fixed = Object.assign({}, offDraft);
+        fixed.serving = {
+          name: sv.name,
+          grams: sv.grams,
+          fromVolume: sv.fromVolume,
+          // Worked out from the nutrition on the barcode actually scanned.
+          macros: nut.macrosForGrams({ per_100g: offDraft.per_100g }, sv.grams)
+        };
+        fixed.portions = [{ name: sv.name, grams: sv.grams }].concat(
+          (offDraft.portions || []).filter(function (p) { return p.name !== sv.name; })
+        );
+        fixed.notes = ['This entry had no serving size, so it came from ' +
+          (sv.borrowedFrom > 1 ? sv.borrowedFrom + ' matching entries' : 'a matching entry') +
+          ' for the same product - identical calories per 100 g. Worth a glance ' +
+          'at the packet.']
+          .concat((offDraft.notes || []).filter(function (n) {
+            return n.indexOf('no serving size on record') === -1;
+          }));
+        return fixed;
+      })
+      .catch(function () { return null; });   // a failed guess is not an error
+  }
+
+  function askUsda(code, offDraft, status) {
+    if (!CalTrack.usda.keyFor(state.settings)) return Promise.resolve(offDraft);
+    if (status) status.textContent = 'Still nothing. Asking USDA...';
+    return CalTrack.usda.lookup(code, CalTrack.usda.keyFor(state.settings))
+      .then(function (usda) {
         if (!usda || !usda.usable) return offDraft;
         return mergeDrafts(offDraft, usda);
-      }).catch(function (err) {
-        // USDA failing must never cost us what OFF already found.
+      })
+      .catch(function (err) {
+        // USDA failing must never cost what Open Food Facts already found.
         if (!offDraft) throw err;
         offDraft.notes = (offDraft.notes || []).concat([
           'USDA was not reachable for a second opinion: ' + err.message
         ]);
         return offDraft;
       });
-    }).catch(function (err) {
-      // OFF failed. USDA alone may still know it.
-      var key = state.settings.usda_api_key;
-      if (!key) throw err;
-      if (status) status.textContent = 'Open Food Facts is unreachable. Asking USDA...';
-      return CalTrack.usda.lookup(code, key).then(function (usda) {
-        if (!usda || !usda.usable) throw err;
-        return usda;
-      });
-    });
   }
 
   /* USDA wins on the serving and the nutrition, because labelNutrients is
@@ -1719,6 +1765,9 @@
    */
   function mergeDrafts(off, usda) {
     if (!off) return usda;
+    // Keep a believable OFF serving over a USDA one; only replace a bad one.
+    var g = off.serving && off.serving.grams;
+    if (g && g >= 5 && g <= 1000) return off;
     var merged = Object.assign({}, usda);
     if (off.name) merged.name = off.name;
     if (off.brand) merged.brand = off.brand;
@@ -1819,7 +1868,7 @@
     var key = $('usdaKey').value.trim();
     store.saveSettings({ usda_api_key: key || null }).then(function (s) {
       state.settings = s;
-      msg.textContent = key ? 'Saved. Scans will fall back to USDA when needed.'
+      msg.textContent = key ? 'Saved. USDA will be asked when the free lookups fall short.'
                             : 'Cleared. Open Food Facts only.';
       toast(key ? 'USDA key saved' : 'USDA key cleared');
     });
@@ -1830,7 +1879,7 @@
     var msg = $('usdaMsg');
     clearMsg(msg);
     var key = $('usdaKey').value.trim();
-    if (!key) { showError(msg, 'Paste a key first.'); return; }
+    if (!key) { showError(msg, 'Paste a key first, then test it.'); return; }
     msg.textContent = 'Asking USDA...';
 
     // A barcode known to be in FDC, so a miss means the key is the problem.
