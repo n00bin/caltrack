@@ -40,6 +40,7 @@ CalTrack.store = (function () {
     activity_level: null,
     body_fat_pct: null,
     estimated_tdee: null,
+    usda_api_key: null,       // the user's own key; never shipped in the repo
     min_kcal: null            // overrides the default target floor
   };
 

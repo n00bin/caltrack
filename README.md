@@ -65,6 +65,29 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
 - **Settings** — a daily calorie target, a goal weight, the rate you're aiming
   for, plus backup export/restore.
 
+## Two food databases
+
+**Open Food Facts** is asked first: free, no key, no setup, and it covers the
+world. **USDA FoodData Central** is asked second, and only when it can help —
+the barcode missed, or the product came back without a serving size. That
+second case is the important one: a per-100 g figure is not what a label
+prints, and it is why scanned numbers used to disagree with the packet.
+
+USDA returns `labelNutrients`, which *is* the printed panel. For barcode
+`842798105464` — Honey Graham Crackers, which Open Food Facts has with no
+serving size at all — it gives a 31 g serving described as "2 full", at
+130 kcal, 2 g protein, 24 g carbs and 3 g fat. Nothing derived, nothing
+inferred.
+
+It needs a free key from [fdc.nal.usda.gov](https://fdc.nal.usda.gov/api-key-signup.html),
+entered in Settings. **The key is never committed** — anything in a public
+repo is readable by everyone and would be someone else's rate limit inside a
+week. Without a key the app behaves exactly as it did before.
+
+When both answer, USDA wins on the serving and the nutrition, and Open Food
+Facts wins on the name — USDA descriptions are shouty and tend to repeat
+themselves ("HONEY GRAHAM CRACKERS, HONEY").
+
 ## What to expect from Open Food Facts
 
 It is free, needs no key and works straight from the browser — but it is a
@@ -249,13 +272,15 @@ there are no accounts yet. That means:
 | `test-store.js` | `node test-store.js` — the data layer, portions, meals, batch cooking. |
 | `test-scan.js` | `node test-scan.js` — barcode check-digits and the API parsing, against real captured responses in `test-fixtures/`. |
 | `test-trend.js` | `node test-trend.js` — the TDEE and plateau maths against synthetic data with known answers. |
+| `usda.js` | USDA FoodData Central, the second opinion. Inert without a key. |
+| `test-usda.js` | `node test-usda.js` — the USDA mapping, against a real captured record. |
 | `test-shell.js` | `node test-shell.js` — checks every file the page loads is in the offline cache, and that the manifest will actually install. |
 | `manifest.json`, `sw.js` | What makes it installable and offline-capable. |
 | `tools/make-icons.py` | Regenerates `icons/` if the mark ever changes. |
 
 All three run without a browser and without a network: `node test-store.js &&
-node test-scan.js && node test-trend.js && node test-shell.js` is 206
-checks in about a second.
+node test-scan.js && node test-trend.js && node test-usda.js && node
+test-shell.js` is 290 checks in about a second.
 
 `store.js` is deliberately walled off, and every one of its functions returns a
 Promise even though `localStorage` is instant. That's so the phase 3 move to

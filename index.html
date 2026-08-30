@@ -172,6 +172,25 @@
     </div>
 
     <div class="card">
+      <h2>Second food database</h2>
+      <p class="hint">Open Food Facts is free and needs no setup, but it is
+        thin on American groceries and often has a product without its serving
+        size. USDA FoodData Central covers about two million US branded items
+        and gives the nutrition panel exactly as it is printed. It needs a free
+        key, which takes about thirty seconds to get and stays on this phone -
+        it is never sent anywhere but USDA.</p>
+      <label class="field"><span>USDA API key</span>
+        <input type="text" id="usdaKey" autocomplete="off" spellcheck="false"
+               placeholder="paste it here"></label>
+      <button id="saveUsdaKey" class="btn primary wide">Save key</button>
+      <button id="testUsdaKey" class="btn wide">Test it</button>
+      <p id="usdaMsg" class="msg"></p>
+      <p class="hint">Get one at
+        <a id="usdaSignup" href="https://fdc.nal.usda.gov/api-key-signup.html"
+           target="_blank" rel="noopener">fdc.nal.usda.gov</a>.</p>
+    </div>
+
+    <div class="card">
       <h2>Backup</h2>
       <p class="hint">Your data lives in this browser only. If you clear site
         data or switch phones it is gone, so export a copy now and then.</p>
@@ -395,6 +414,7 @@
 
 <script src="store.js"></script>
 <script src="scan.js"></script>
+<script src="usda.js"></script>
 <script src="trend.js"></script>
 <script src="app.js"></script>
 </body>

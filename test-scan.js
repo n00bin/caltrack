@@ -78,6 +78,9 @@ eq('nothing at all', off._kcalPer100g({}), 0);
 eq('shouty name title-cased',
   off._tidyName('NUTELLA HAZELNUT SPREAD'), 'Nutella Hazelnut Spread');
 eq('normal name untouched', off._tidyName('Original Potato Crisps'), 'Original Potato Crisps');
+eq('an apostrophe is not a new word', off._tidyName("NATURE'S OWN BUTTERBREAD"),
+  "Nature's Own Butterbread");
+eq('hyphens still start one', off._tidyName('SUGAR-FREE COLA'), 'Sugar-Free Cola');
 eq('first brand only', off._firstBrand('Nutella, Ferrero, Yum yum'), 'Nutella');
 eq('no brand', off._firstBrand(undefined), '');
 

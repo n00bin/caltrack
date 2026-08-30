@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1640+b7faa37';
+  var BUILD = '2026-08-30.1701+f29f300';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1644,7 +1644,7 @@
       }
 
       status.textContent = 'Not one of yours yet. Asking Open Food Facts...';
-      return CalTrack.off.lookup(code).then(function (draft) {
+      return lookupBarcode(code, status).then(function (draft) {
         var purpose = state.scanPurpose;
         closeScanSheet(false);
 
@@ -1674,6 +1674,62 @@
       showError(status, err.message + ' Close and scan again, or type the number.');
       $('manualBox').open = true;
     });
+  }
+
+  /* Open Food Facts first: no key, instant, and it covers the world.
+   * USDA second, and only when it can actually help - the barcode was a
+   * miss, or the product came back without a serving size, which is the
+   * case that had the numbers disagreeing with the packet.
+   */
+  function lookupBarcode(code, status) {
+    return CalTrack.off.lookup(code).then(function (offDraft) {
+      var key = state.settings.usda_api_key;
+      var needsMore = !offDraft || !offDraft.serving;
+      if (!key || !needsMore) return offDraft;
+
+      if (status) status.textContent = 'Open Food Facts came up short. Asking USDA...';
+
+      return CalTrack.usda.lookup(code, key).then(function (usda) {
+        if (!usda || !usda.usable) return offDraft;
+        return mergeDrafts(offDraft, usda);
+      }).catch(function (err) {
+        // USDA failing must never cost us what OFF already found.
+        if (!offDraft) throw err;
+        offDraft.notes = (offDraft.notes || []).concat([
+          'USDA was not reachable for a second opinion: ' + err.message
+        ]);
+        return offDraft;
+      });
+    }).catch(function (err) {
+      // OFF failed. USDA alone may still know it.
+      var key = state.settings.usda_api_key;
+      if (!key) throw err;
+      if (status) status.textContent = 'Open Food Facts is unreachable. Asking USDA...';
+      return CalTrack.usda.lookup(code, key).then(function (usda) {
+        if (!usda || !usda.usable) throw err;
+        return usda;
+      });
+    });
+  }
+
+  /* USDA wins on the serving and the nutrition, because labelNutrients is
+   * the printed panel rather than a conversion of it. Open Food Facts
+   * usually wins on the name - USDA descriptions are shouty and often
+   * repeat themselves.
+   */
+  function mergeDrafts(off, usda) {
+    if (!off) return usda;
+    var merged = Object.assign({}, usda);
+    if (off.name) merged.name = off.name;
+    if (off.brand) merged.brand = off.brand;
+    merged.notes = ['The serving size and nutrition here come from USDA, ' +
+      'which stores the label as printed.']
+      .concat(usda.notes || [])
+      .concat((off.notes || []).filter(function (n) {
+        // OFF's "no serving size" complaint is moot now that USDA supplied one.
+        return n.indexOf('no serving size on record') === -1;
+      }));
+    return merged;
   }
 
   function manualLookup() {
@@ -1750,9 +1806,43 @@
     $('setTargetKcal').value = state.settings.target_kcal || '';
     $('setGoalWeight').value = state.settings.goal_weight_lbs || '';
     $('setTargetRate').value = state.settings.target_rate_lbs_per_week || '';
+    $('usdaKey').value = state.settings.usda_api_key || '';
+    clearMsg($('usdaMsg'));
     clearMsg($('settingsMsg'));
     clearMsg($('backupMsg'));
     fillEstimator();
+  }
+
+  function saveUsdaKey() {
+    var msg = $('usdaMsg');
+    clearMsg(msg);
+    var key = $('usdaKey').value.trim();
+    store.saveSettings({ usda_api_key: key || null }).then(function (s) {
+      state.settings = s;
+      msg.textContent = key ? 'Saved. Scans will fall back to USDA when needed.'
+                            : 'Cleared. Open Food Facts only.';
+      toast(key ? 'USDA key saved' : 'USDA key cleared');
+    });
+  }
+
+  // Proves the key works before you find out mid-shop that it does not.
+  function testUsdaKey() {
+    var msg = $('usdaMsg');
+    clearMsg(msg);
+    var key = $('usdaKey').value.trim();
+    if (!key) { showError(msg, 'Paste a key first.'); return; }
+    msg.textContent = 'Asking USDA...';
+
+    // A barcode known to be in FDC, so a miss means the key is the problem.
+    CalTrack.usda.lookup('842798105464', key).then(function (d) {
+      if (d && d.usable) {
+        msg.textContent = 'Working. It found "' + d.name + '" at ' +
+          Math.round(d.serving.macros.kcal) + ' kcal per ' + d.serving.grams + ' g.';
+      } else {
+        showError(msg, 'The key worked but the test product came back empty. ' +
+          'Odd, but scanning should still work.');
+      }
+    }).catch(function (err) { showError(msg, err.message); });
   }
 
   // ---------------------------------------------- working out a target
@@ -2065,6 +2155,8 @@
     $('deleteFoodBtn').addEventListener('click', deleteFood);
 
     $('estimateBtn').addEventListener('click', runEstimate);
+    $('saveUsdaKey').addEventListener('click', saveUsdaKey);
+    $('testUsdaKey').addEventListener('click', testUsdaKey);
     $('saveSettingsBtn').addEventListener('click', saveSettings);
     $('exportBtn').addEventListener('click', exportBackup);
     $('importBtn').addEventListener('click', function () { $('importFile').click(); });

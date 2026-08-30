@@ -1,0 +1,33 @@
+{
+  "fdcId": 1996726,
+  "description": "HONEY GRAHAM CRACKERS, HONEY",
+  "brandOwner": "Defense Commissary Agency",
+  "brandName": "FREEDOM'S CHOICE",
+  "gtinUpc": "842798105464",
+  "servingSize": 31.0,
+  "servingSizeUnit": "g",
+  "householdServingFullText": "2 full",
+  "labelNutrients": {
+    "fat": {
+      "value": 3.0
+    },
+    "sodium": {
+      "value": 135
+    },
+    "carbohydrates": {
+      "value": 24.0
+    },
+    "fiber": {
+      "value": 0.992
+    },
+    "sugars": {
+      "value": 8.0
+    },
+    "protein": {
+      "value": 2.0
+    },
+    "calories": {
+      "value": 130
+    }
+  }
+}

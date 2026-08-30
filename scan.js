@@ -283,7 +283,10 @@ CalTrack.off = (function () {
     name = (name || '').trim();
     if (!name) return '';
     if (name === name.toUpperCase()) {
-      name = name.toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); });
+      // Not \b: it counts an apostrophe as a boundary, so NATURE'S OWN
+      // would come out as Nature'S Own.
+      name = name.toLowerCase().replace(/(^|[\s\-\/(,.])([a-z])/g,
+        function (m, gap, c) { return gap + c.toUpperCase(); });
     }
     return name;
   }
