@@ -3,6 +3,9 @@
 A barcode-scanning food log that runs as a plain static web page. No build
 step, no framework, no packaging — the browser reads the files directly.
 
+**Live at [n00bin.github.io/caltrack](https://n00bin.github.io/caltrack/).**
+Open that on your phone and add it to the home screen.
+
 Built to a written build plan kept privately alongside the repo.
 **Steps 1 and 2 of that plan are done:**
 manual food entry, a food library, today's log and running total, and barcode
@@ -78,8 +81,8 @@ then visit `http://<your-pc-ip>:8000` on the phone.
 **Scanning needs more than that.** Browsers only hand over the camera on
 `https://` or on `localhost` — so a `file://` page can't scan, and neither can
 a plain `http://192.168.…` address on your phone. The app says so plainly and
-offers the type-the-number box instead. The real fix is GitHub Pages, which is
-HTTPS and where scanning will just work.
+offers the type-the-number box instead. For scanning, use the live HTTPS
+address above; local files and the LAN server are for development.
 
 ### The one external dependency
 
@@ -142,6 +145,18 @@ planned Postgres table, so the migration is a straight lift.
 
 ## Deploying
 
-Not set up yet, and nothing here needs it. When you want it: make this folder a
-repo, push it to GitHub, then Settings → Pages → deploy from `main`. After that
-it's commit, push, live.
+Done — GitHub Pages serves `main` from the repository root, with HTTPS
+enforced. From here the whole deploy flow is:
+
+```
+git add -A
+git commit -m "what changed"
+git push
+```
+
+A push takes roughly a minute to appear. `gh api repos/n00bin/caltrack/pages
+--jq .status` says whether the last one built. Pages occasionally fails for no
+good reason; pushing again clears it.
+
+The build plan lives outside the repo, since it carries personal context that
+doesn't belong in a public one.
