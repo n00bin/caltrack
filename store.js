@@ -276,6 +276,47 @@ CalTrack.nutrition = (function () {
     return macrosForGrams(food, gramsFor(food, portionName, qty));
   }
 
+  /* Adds up a meal: a list of {food_id, portion, qty} against a lookup of
+   * foods by id. A food that has been deleted is counted as MISSING rather
+   * than quietly as zero, because a meal that silently shrinks is worse
+   * than one that admits it is broken.
+   */
+  function sumItems(items, foodsById) {
+    var out = { kcal: 0, protein: 0, carbs: 0, fat: 0, grams: 0, missing: 0 };
+    (items || []).forEach(function (it) {
+      var food = foodsById[it.food_id];
+      if (!food) { out.missing++; return; }
+      var grams = gramsFor(food, it.portion, it.qty);
+      var m = macrosForGrams(food, grams);
+      out.kcal += m.kcal;
+      out.protein += m.protein;
+      out.carbs += m.carbs;
+      out.fat += m.fat;
+      out.grams += grams;
+    });
+    return out;
+  }
+
+  /* Batch cooking: everything that went into the pot, divided by what the
+   * finished pot weighs. Water boils off and fat renders out, which is why
+   * this uses the weight of the FINISHED dish rather than the sum of the
+   * ingredients - the calories stay, the weight does not.
+   */
+  function per100gFrom(totals, finishedGrams) {
+    var f = 100 / finishedGrams;
+    return {
+      kcal: totals.kcal * f,
+      protein: totals.protein * f,
+      carbs: totals.carbs * f,
+      fat: totals.fat * f
+    };
+  }
+
+  // Weigh-to-derive: five slices weighed 140 g, so a slice is 28 g.
+  function perUnitGrams(totalGrams, count) {
+    return totalGrams / count;
+  }
+
   // Sums the snapshot values already stored on log entries.
   function totals(entries) {
     return entries.reduce(function (acc, e) {
@@ -292,6 +333,9 @@ CalTrack.nutrition = (function () {
     gramsFor: gramsFor,
     macrosForGrams: macrosForGrams,
     macrosFor: macrosFor,
+    sumItems: sumItems,
+    per100gFrom: per100gFrom,
+    perUnitGrams: perUnitGrams,
     totals: totals
   };
 })();

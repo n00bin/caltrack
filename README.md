@@ -7,9 +7,8 @@ step, no framework, no packaging — the browser reads the files directly.
 Open that on your phone and add it to the home screen.
 
 Built to a written build plan kept privately alongside the repo.
-**Steps 1 and 2 of that plan are done:**
-manual food entry, a food library, today's log and running total, and barcode
-scanning with an Open Food Facts lookup.
+**All six steps of that plan are done** — food logging, barcode scanning,
+portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
 
 ## What works right now
 
@@ -27,14 +26,31 @@ scanning with an Open Food Facts lookup.
 - **Portions** — every food stores its nutrition per 100 g and carries a list
   of named portions. Tell it once that a slice of bread is 28 g and from then
   on you log "2 slices" and it does the maths. Grams is always available.
+  Don't know what a slice weighs? Press **Weigh**, put five on the scale, type
+  5 and the reading, and it works out the rest.
 - **Foods** — your own library. Add, edit and delete. If a label is written
   per serving instead of per 100 g, open "The label is per serving" and it
   converts for you.
-- **Settings** — a daily calorie target (the Today screen then shows what's
-  left), plus backup export/restore.
-
-Not built yet, in plan order: the weigh-to-derive button, meals, weigh-ins and
-the trend chart, adaptive TDEE and plateau detection.
+- **Meals** — a saved list of food + quantity, tapped once instead of four
+  times. Before logging one you can bump any line — four slices of bologna
+  today instead of three — without disturbing the saved meal.
+- **Batch cooking** — list everything that went into the pot, weigh the
+  finished dish, and press *Make it a food*. You get a food worked out per
+  100 g, so from then on you weigh your bowl and log the grams. It uses the
+  finished weight rather than the sum of the ingredients, because water boils
+  off and the calories don't.
+- **Trend** — weigh in, and the chart shows the smoothed trend line
+  prominently with the raw scale readings faint behind it. Weighing twice in
+  a day replaces the reading rather than stacking it.
+- **What you actually burn** — your TDEE, backed out of what really happened
+  rather than predicted from a formula, with an honest label on it: *not yet
+  reliable*, *early estimate*, or *measured*.
+- **Plateau detection** — compares the loss your logged deficit predicts
+  against the loss the scale actually shows, and raises a tiered, honestly
+  worded alert. If it's confident, it offers two levers — eat less, or move
+  more — and applies neither without you pressing the button.
+- **Settings** — a daily calorie target, a goal weight, the rate you're aiming
+  for, plus backup export/restore.
 
 ## What to expect from Open Food Facts
 
@@ -64,6 +80,38 @@ Two deliberate refusals in the parsing, both covered by tests:
 - A serving given only as `355 ml` or `16 fl oz` produces no portion at all.
   The app says so and leaves it to you, rather than assuming millilitres are
   grams — which is fine for a soda and badly wrong for oil.
+
+## The maths, and one deliberate change to the plan
+
+`trend.js` holds all of it, touches neither the DOM nor storage, and is
+covered by 61 checks against synthetic data where the right answer is known
+in advance — including the plan's own worked example (2,100 kcal a day and
+2 lb lost over 28 days gives a TDEE of 2,350).
+
+**Where it departs from the plan.** The plan measures the change in weight as
+`ema_start - ema_now`. That's right once the average has settled, but wrong at
+the start: the EMA is seeded on your first weigh-in, so it begins with no lag
+and ends about nine days behind, which makes the loss look smaller than it was.
+On a fresh 28-day window that reads 1.4 lb where the truth is 2 lb — and an
+under-stated loss means an under-stated burn rate, which means a target that's
+tighter than it should be. Wrong in the worst direction for a tool like this.
+
+So the change is measured with a least-squares fit through the weigh-ins
+instead. No warm-up, uses every reading rather than two, and it's what the
+flat-trend test needs anyway. The EMA is still what you see on the chart.
+There's a test that fails if endpoint differencing is ever put back.
+
+**Things it refuses to do:**
+
+- A day with no food logged is not a zero-calorie day. Counting it as one
+  would invent an enormous deficit and poison every number downstream.
+- It won't cry plateau on thin evidence. Fewer than four weigh-ins in the
+  window, a gap of more than three days in the food log, or a single overnight
+  jump above 3 lb, and it holds its verdict and tells you which one muted it.
+- It won't drop your target below the floor — the higher of 1,500 kcal or 75%
+  of your measured burn. At that point it says so, and says that a couple of
+  weeks at maintenance beats a smaller number.
+- It changes nothing on its own. Every adjustment is a button you press.
 
 ## Running it
 
@@ -111,9 +159,14 @@ there are no accounts yet. That means:
 | `style.css` | Mobile-first. Follows your phone's light/dark setting. |
 | `store.js` | **The only file that knows where data lives.** Also holds the portion maths. |
 | `scan.js` | The camera, and the Open Food Facts lookup behind it. |
+| `trend.js` | EMA smoothing, adaptive TDEE, plateau detection, target adjustment. No DOM, no storage. |
 | `app.js` | Screens and wiring. Never touches `localStorage` itself. |
-| `test-store.js` | `node test-store.js` — checks the data layer. No browser needed. |
-| `test-scan.js` | `node test-scan.js` — checks barcode check-digits and the API parsing, against real captured responses in `test-fixtures/`. |
+| `test-store.js` | `node test-store.js` — the data layer, portions, meals, batch cooking. |
+| `test-scan.js` | `node test-scan.js` — barcode check-digits and the API parsing, against real captured responses in `test-fixtures/`. |
+| `test-trend.js` | `node test-trend.js` — the TDEE and plateau maths against synthetic data with known answers. |
+
+All three run without a browser and without a network: `node test-store.js &&
+node test-scan.js && node test-trend.js` is 142 checks in about a second.
 
 `store.js` is deliberately walled off, and every one of its functions returns a
 Promise even though `localStorage` is instant. That's so the phase 3 move to

@@ -93,6 +93,44 @@ function checkTrue(label, cond) {
   check('remove returns count', deleted, 1);
   check('rows left', (await store.log.all()).length, 2);
 
+  // --- meals: composite foods ------------------------------------------
+  const byId = {};
+  (await store.foods.all()).forEach(f => { byId[f.id] = f; });
+
+  const sandwich = [
+    { food_id: bread.id, portion: 'slice', qty: 2 },
+    { food_id: junk.id, portion: 'tbsp', qty: 1 }
+  ];
+  const st = nut.sumItems(sandwich, byId);
+  // bread was edited to 270 kcal/100g above; 2 slices = 56 g
+  check('meal kcal is the sum of its parts', st.kcal, 270 * 0.56 + 680 * 0.14);
+  check('meal weight is tracked too', st.grams, 56 + 14);
+  check('nothing missing', st.missing, 0);
+
+  // A deleted ingredient must be reported, never counted as zero.
+  const broken = nut.sumItems(
+    [{ food_id: bread.id, portion: 'slice', qty: 1 },
+     { food_id: 'gone', portion: 'gram', qty: 50 }], byId);
+  check('a deleted ingredient is flagged', broken.missing, 1);
+  check('and the rest still adds up', broken.kcal, 270 * 0.28);
+
+  // --- batch cooking: the pot of chilli ---------------------------------
+  // 1200 kcal of ingredients, and the finished pot weighs 900 g.
+  const pot = nut.per100gFrom({ kcal: 1200, protein: 90, carbs: 60, fat: 45 }, 900);
+  check('pot kcal per 100 g', pot.kcal, 1200 / 9);
+  check('pot protein per 100 g', pot.protein, 10);
+  // A 300 g bowl is a third of the pot.
+  check('a 300 g bowl is a third of it', pot.kcal * 3, 400);
+
+  // Boiling water off concentrates it: same calories, less weight.
+  const reduced = nut.per100gFrom({ kcal: 1200, protein: 90, carbs: 60, fat: 45 }, 600);
+  checkTrue('a reduced sauce is denser per 100 g', reduced.kcal > pot.kcal);
+
+  // --- weigh to derive ---------------------------------------------------
+  check('five slices weighing 140 g means 28 g each', nut.perUnitGrams(140, 5), 28);
+  check('one item on the scale', nut.perUnitGrams(31.5, 1), 31.5);
+  check('fractional counts work', nut.perUnitGrams(50, 2.5), 20);
+
   // --- settings ---------------------------------------------------------
   let s = await store.getSettings();
   check('settings default target', s.target_kcal, null);

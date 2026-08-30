@@ -215,14 +215,6 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 .helper-body { padding-top: 8px; }
 .helper-body p { font-size: .82rem; color: var(--muted); margin-top: 0; }
 
-.portionrow { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
-.portionrow input:first-child { flex: 2; }
-.portionrow input:nth-child(2) { flex: 1; }
-.portionrow button {
-  background: none; border: 0; color: var(--muted);
-  font-size: 1.3rem; width: 40px; height: 44px; cursor: pointer;
-}
-
 /* ---------- fab + tabs ---------- */
 
 .fab {
@@ -299,6 +291,101 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 
 .sheet-actions { display: flex; gap: 8px; margin-top: 20px; }
 .sheet-actions .btn { flex: 1; }
+
+/* ---------- segmented control ---------- */
+
+.segmented {
+  display: flex; gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  margin-bottom: 12px;
+}
+.segmented button {
+  flex: 1; background: none; border: 0; border-radius: 999px;
+  color: var(--muted); font: inherit; font-size: .85rem;
+  padding: 9px 4px; min-height: 38px; cursor: pointer;
+}
+.segmented button.is-active {
+  background: var(--surface); color: var(--text); font-weight: 700;
+}
+
+/* ---------- portion + weigh-to-derive ---------- */
+
+.portionwrap {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.portionrow { display: flex; gap: 8px; margin: 0; align-items: center; }
+.portionrow input:first-child { flex: 2; }
+.portionrow input.p-grams { flex: 1; }
+.portionrow button {
+  background: none; border: 0; color: var(--muted);
+  font-size: 1.3rem; width: 40px; height: 44px; cursor: pointer;
+}
+.portionrow .weighbtn {
+  width: auto; padding: 0 10px; font-size: .78rem; font-weight: 600;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface-2); height: 40px;
+}
+
+.weighstrip {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 6px 0 0;
+}
+.weighstrip[hidden] { display: none; }
+.weighstrip input { flex: 1; min-width: 110px; }
+.weighstrip .w-out { flex-basis: 100%; margin: 0; }
+
+/* ---------- meal rows ---------- */
+
+.itemrow { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.itemrow .m-food { flex: 3; min-width: 0; }
+.itemrow .m-qty { flex: 1; min-width: 62px; }
+.itemrow .m-portion { flex: 1.6; min-width: 0; }
+.itemrow .rowdel {
+  background: none; border: 0; color: var(--muted);
+  font-size: 1.3rem; width: 34px; height: 44px; cursor: pointer; flex: none;
+}
+.logrow-name { flex: 3; min-width: 0; font-size: .9rem; }
+
+/* ---------- trend ---------- */
+
+.chart { width: 100%; }
+.chartsvg { width: 100%; height: auto; display: block; }
+.chartsvg .grid { stroke: var(--line); stroke-width: 1; }
+.chartsvg .axis { fill: var(--muted); font-size: 9px; }
+.chartsvg .raw { fill: var(--muted); opacity: .45; }
+.chartsvg .trendline { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+
+.bignum { font-size: 1.1rem; }
+.bignum b { font-size: 2.1rem; }
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  margin: 6px 0;
+}
+.badge-ok, .badge-none { }
+.badge-low, .badge-watch { color: #b07d00; border-color: #b07d00; }
+.badge-likely { color: #c05621; border-color: #c05621; }
+.badge-confirmed { color: var(--danger); border-color: var(--danger); }
+
+.adjust {
+  border-top: 1px solid var(--line);
+  margin-top: 14px; padding-top: 12px;
+}
 
 /* ---------- scanner ---------- */
 

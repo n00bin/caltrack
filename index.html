@@ -40,14 +40,64 @@
 
   </section>
 
-  <!-- ================= FOODS ================= -->
+  <!-- ============= FOODS AND MEALS ============= -->
   <section id="view-foods" class="view" hidden>
-    <div class="rowbar">
-      <input type="search" id="foodFilter" placeholder="Search your foods" autocomplete="off">
-      <button id="foodsScanBtn" class="btn" aria-label="Scan a barcode">Scan</button>
-      <button id="newFoodBtn" class="btn primary">New</button>
+    <div class="segmented" id="foodsSegment">
+      <button data-seg="foods" class="is-active">Foods</button>
+      <button data-seg="meals">Meals</button>
     </div>
-    <div id="foodList"></div>
+
+    <div id="foodsPane">
+      <div class="rowbar">
+        <input type="search" id="foodFilter" placeholder="Search your foods" autocomplete="off">
+        <button id="foodsScanBtn" class="btn" aria-label="Scan a barcode">Scan</button>
+        <button id="newFoodBtn" class="btn primary">New</button>
+      </div>
+      <div id="foodList"></div>
+    </div>
+
+    <div id="mealsPane" hidden>
+      <div class="rowbar">
+        <input type="search" id="mealFilter" placeholder="Search your meals" autocomplete="off">
+        <button id="newMealBtn" class="btn primary">New</button>
+      </div>
+      <div id="mealList"></div>
+    </div>
+  </section>
+
+  <!-- ================= TREND ================= -->
+  <section id="view-trend" class="view" hidden>
+    <div class="card">
+      <h2>Weigh in</h2>
+      <div class="qtyrow">
+        <input type="number" id="weightInput" inputmode="decimal" step="0.1"
+               placeholder="lbs" aria-label="Weight in pounds">
+        <input type="date" id="weightDate" aria-label="Date of this weigh-in">
+      </div>
+      <button id="saveWeight" class="btn primary wide">Save weight</button>
+      <p id="weightMsg" class="msg"></p>
+    </div>
+
+    <div class="card">
+      <h2>Trend</h2>
+      <div id="chart" class="chart"></div>
+      <p id="chartCaption" class="hint"></p>
+    </div>
+
+    <div class="card">
+      <h2>What you actually burn</h2>
+      <div id="tdeeBody"></div>
+    </div>
+
+    <div class="card" id="plateauCard">
+      <h2>Are you still losing?</h2>
+      <div id="plateauBody"></div>
+    </div>
+
+    <div class="card">
+      <h2>Recent weigh-ins</h2>
+      <div id="weighList"></div>
+    </div>
   </section>
 
   <!-- ================ SETTINGS =============== -->
@@ -62,6 +112,13 @@
         <span>Goal weight (lbs)</span>
         <input type="number" id="setGoalWeight" inputmode="decimal" placeholder="optional">
       </label>
+      <label class="field">
+        <span>Aiming to lose (lbs per week)</span>
+        <input type="number" id="setTargetRate" inputmode="decimal" step="0.25"
+               placeholder="1">
+      </label>
+      <p class="hint">The rate is what the Trend screen uses to work out a new
+        target if your losses stall. One pound a week is a 500 kcal daily gap.</p>
       <button id="saveSettingsBtn" class="btn primary wide">Save</button>
       <p id="settingsMsg" class="msg"></p>
     </div>
@@ -91,6 +148,7 @@
 <nav class="tabs">
   <button class="tab is-active" data-view="today">Today</button>
   <button class="tab" data-view="foods">Foods</button>
+  <button class="tab" data-view="trend">Trend</button>
   <button class="tab" data-view="settings">Settings</button>
 </nav>
 
@@ -107,6 +165,11 @@
       <button data-meal="lunch">Lunch</button>
       <button data-meal="dinner">Dinner</button>
       <button data-meal="snack">Snack</button>
+    </div>
+
+    <div class="segmented" id="pickSegment">
+      <button data-seg="foods" class="is-active">Foods</button>
+      <button data-seg="meals">Meals</button>
     </div>
 
     <div class="rowbar">
@@ -223,10 +286,65 @@
   </div>
 </div>
 
+<!-- ============== SHEET: meal builder ============== -->
+<div id="mealSheet" class="sheet" hidden>
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2 id="mealSheetTitle">New meal</h2>
+      <button class="iconbtn close" data-close aria-label="Close">&times;</button>
+    </div>
+
+    <label class="field"><span>Name</span>
+      <input type="text" id="mealName" placeholder="Bologna sandwich"></label>
+
+    <h3>What goes in it</h3>
+    <div id="mealItems"></div>
+    <button id="mealAddItem" class="btn small">Add an ingredient</button>
+
+    <p id="mealTotals" class="preview"></p>
+
+    <details class="helper">
+      <summary>I cooked a batch of this</summary>
+      <div class="helper-body">
+        <p>For a pot of chilli: list everything that went in, weigh the
+          finished pot, and press the button. You get a new food worked out
+          per 100 g, so from then on you weigh your bowl and log the grams.</p>
+        <div class="qtyrow">
+          <input type="number" id="batchGrams" inputmode="decimal" step="any"
+                 placeholder="finished weight in g">
+          <button id="batchBtn" class="btn">Make it a food</button>
+        </div>
+      </div>
+    </details>
+
+    <div class="sheet-actions">
+      <button id="deleteMealBtn" class="btn danger" hidden>Delete</button>
+      <button id="saveMealBtn" class="btn primary">Save meal</button>
+    </div>
+    <p id="mealMsg" class="msg"></p>
+  </div>
+</div>
+
+<!-- ============== SHEET: log a meal ============== -->
+<div id="mealLogSheet" class="sheet" hidden>
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2 id="mealLogName">Meal</h2>
+      <button class="iconbtn close" data-close aria-label="Close">&times;</button>
+    </div>
+    <p class="hint">Change any line before logging it - four slices of bologna
+      today instead of three. The saved meal stays as it was.</p>
+    <div id="mealLogItems"></div>
+    <p id="mealLogTotals" class="preview"></p>
+    <button id="mealLogConfirm" class="btn primary wide">Add to log</button>
+  </div>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 
 <script src="store.js"></script>
 <script src="scan.js"></script>
+<script src="trend.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
