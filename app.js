@@ -24,6 +24,7 @@
     logAfterSave: false,
     segment: 'foods',        // Foods tab: foods or meals
     pickSegment: 'foods',    // the + sheet: foods or meals
+    nutMode: 'serving',      // how the food editor is asking for nutrition
     editingMealId: null,
     mealItemAfterSave: false,
     loggingMeal: null,       // { meal, items } while the log-a-meal sheet is open
@@ -283,9 +284,7 @@
           '<span class="fi-main"><span class="fi-name"></span>' +
           '<span class="fi-sub"></span></span>';
         btn.querySelector('.fi-name').textContent = f.name;
-        btn.querySelector('.fi-sub').textContent =
-          (f.brand ? f.brand + '  -  ' : '') +
-          round(f.per_100g.kcal) + ' kcal / 100 g';
+        btn.querySelector('.fi-sub').textContent = foodSubtitle(f);
         btn.addEventListener('click', function () { openFoodSheet(f); });
         list.appendChild(btn);
       });
@@ -365,9 +364,7 @@
           '<span class="fi-main"><span class="fi-name"></span>' +
           '<span class="fi-sub"></span></span>';
         btn.querySelector('.fi-name').textContent = f.name;
-        btn.querySelector('.fi-sub').textContent =
-          (f.brand ? f.brand + '  -  ' : '') +
-          round(f.per_100g.kcal) + ' kcal / 100 g';
+        btn.querySelector('.fi-sub').textContent = foodSubtitle(f);
         btn.addEventListener('click', function () {
           $('pickSheet').hidden = true;
           openQtySheet(f);
@@ -513,17 +510,36 @@
     $('fCarbs').value = shown(per.carbs);
     $('fFat').value = shown(per.fat);
 
-    ['cvGrams', 'cvKcal', 'cvProtein', 'cvCarbs', 'cvFat'].forEach(function (id) {
-      $(id).value = '';
-    });
-
-    // "gram" is implicit and always available, so it is not shown here.
+    // "gram" is implicit and always available, so it is never listed.
     var named = (food && food.portions || []).filter(function (p) {
       return p.name !== 'gram';
     });
+
+    /* The first named portion IS the serving, so the form opens showing the
+     * food the way its label describes it. A food with no named portion has
+     * nothing to be per-serving about, so that one opens on per 100 g.
+     */
+    var serving = named[0] || null;
+    $('svName').value = serving ? serving.name : '';
+    $('svGrams').value = serving ? serving.grams : '';
+    if (serving && food) {
+      var m = nut.macrosFor(food, serving.name, 1);
+      // Two decimals: these get converted back to per 100 g on save, so a
+      // coarse round here would nudge the stored numbers every time you
+      // opened and saved a food without changing anything.
+      $('svKcal').value = round(m.kcal, 2);
+      $('svProtein').value = round(m.protein, 2);
+      $('svCarbs').value = round(m.carbs, 2);
+      $('svFat').value = round(m.fat, 2);
+    } else {
+      ['svKcal', 'svProtein', 'svCarbs', 'svFat'].forEach(function (id) { $(id).value = ''; });
+    }
+
+    setNutMode((serving || !food) ? 'serving' : 'per100');
+
+    // The serving is edited above, so only the extra ones are listed here.
     $('portionRows').innerHTML = '';
-    named.forEach(addPortionRow);
-    if (!named.length) addPortionRow();
+    named.slice(1).forEach(addPortionRow);
 
     $('deleteFoodBtn').hidden = !isExisting;
     $('foodSheet').hidden = false;
@@ -641,6 +657,42 @@
     return out;
   }
 
+  /* Which way round the nutrition is being typed. Per 100 g is how the app
+   * STORES food - it is the only unit that never goes ambiguous - but almost
+   * no American label is written that way, so it is not what anyone is asked
+   * for. The conversion happens here and is never the user's problem.
+   */
+  function setNutMode(mode) {
+    state.nutMode = mode;
+    $('servingPane').hidden = (mode !== 'serving');
+    $('per100Pane').hidden = (mode !== 'per100');
+    $('portionsHead').firstChild.textContent = (mode === 'serving')
+      ? 'Other ways you measure it ' : 'Portions ';
+    $('portionsHint').textContent = (mode === 'serving')
+      ? 'The serving above is already one way. Add more if you measure it ' +
+        'differently at different times - a cup as well as a slice. Grams is ' +
+        'always available without adding anything.'
+      : 'A slice, a cup, a bottle - whatever you would say out loud. Give each ' +
+        'one a weight in grams and you can log "2 slices" from then on. Grams ' +
+        'is always available.';
+    Array.prototype.forEach.call($('nutMode').querySelectorAll('button'), function (b) {
+      b.classList.toggle('is-active', b.dataset.mode === mode);
+    });
+    updateServingEcho();
+  }
+
+  // Shows the working, so the numbers are never a black box.
+  function updateServingEcho() {
+    var el = $('svEcho');
+    if (state.nutMode !== 'serving') { el.textContent = ''; return; }
+    var g = parseFloat($('svGrams').value);
+    var kcal = parseFloat($('svKcal').value);
+    if (!(g > 0) || !isFinite(kcal)) { el.textContent = ''; return; }
+    var unit = $('svName').value.trim() || 'serving';
+    el.textContent = 'So one ' + unit + ' is ' + round(kcal) + ' kcal, and you can ' +
+      'log it as "2 ' + plural(unit, 2) + '" without thinking about grams again.';
+  }
+
   function saveFood() {
     var msg = $('foodMsg');
     clearMsg(msg);
@@ -648,23 +700,53 @@
     var name = $('fName').value.trim();
     if (!name) { showError(msg, 'Give the food a name.'); return; }
 
-    var kcal = parseFloat($('fKcal').value);
-    if (!isFinite(kcal) || kcal < 0) {
-      showError(msg, 'Enter the calories per 100 g.');
-      return;
+    var per100, portions;
+
+    if (state.nutMode === 'serving') {
+      var grams = parseFloat($('svGrams').value);
+      if (!isFinite(grams) || grams <= 0) {
+        showError(msg, 'How much does one serving weigh? The label gives it in ' +
+          'grams, in brackets after the serving size.');
+        return;
+      }
+      var sKcal = parseFloat($('svKcal').value);
+      if (!isFinite(sKcal) || sKcal < 0) {
+        showError(msg, 'Enter the calories in one serving.');
+        return;
+      }
+      // Same arithmetic as batch cooking, and tested in the same place.
+      per100 = nut.per100gFrom({
+        kcal: sKcal,
+        protein: parseFloat($('svProtein').value) || 0,
+        carbs: parseFloat($('svCarbs').value) || 0,
+        fat: parseFloat($('svFat').value) || 0
+      }, grams);
+
+      var unit = ($('svName').value.trim() || 'serving').toLowerCase();
+      portions = [{ name: unit, grams: grams }].concat(
+        collectPortions().filter(function (p) { return p.name.toLowerCase() !== unit; })
+      );
+    } else {
+      var kcal = parseFloat($('fKcal').value);
+      if (!isFinite(kcal) || kcal < 0) {
+        showError(msg, 'Enter the calories per 100 g.');
+        return;
+      }
+      per100 = {
+        kcal: kcal,
+        protein: parseFloat($('fProtein').value) || 0,
+        carbs: parseFloat($('fCarbs').value) || 0,
+        fat: parseFloat($('fFat').value) || 0
+      };
+      portions = collectPortions();
     }
 
     var record = {
       name: name,
       brand: $('fBrand').value.trim(),
       barcode: $('fBarcode').value.trim() || null,
-      per_100g: {
-        kcal: kcal,
-        protein: parseFloat($('fProtein').value) || 0,
-        carbs: parseFloat($('fCarbs').value) || 0,
-        fat: parseFloat($('fFat').value) || 0
-      },
-      portions: collectPortions(),
+      per_100g: per100,
+      portions: portions,
       source: 'manual'
     };
 
@@ -721,25 +803,26 @@
     });
   }
 
-  // Label says "per serving"? Convert it to per 100 g.
-  function convertServing() {
-    var g = parseFloat($('cvGrams').value);
-    if (!isFinite(g) || g <= 0) { toast('Enter the serving weight in grams'); return; }
-    var factor = 100 / g;
-    [['cvKcal', 'fKcal'], ['cvProtein', 'fProtein'],
-     ['cvCarbs', 'fCarbs'], ['cvFat', 'fFat']].forEach(function (pair) {
-      var v = parseFloat($(pair[0]).value);
-      if (isFinite(v)) $(pair[1]).value = round(v * factor, 2);
-    });
-    toast('Filled in per 100 g');
-  }
-
   // --------------------------------------------------------------- meals
 
   function indexById(rows) {
     var out = {};
     rows.forEach(function (r) { out[r.id] = r; });
     return out;
+  }
+
+  /* What a food says underneath its name. If it has a serving, that is what
+   * the person actually eats, so that is what gets shown - per 100 g only
+   * appears for foods that have no serving to speak of.
+   */
+  function foodSubtitle(f) {
+    var prefix = f.brand ? f.brand + '  -  ' : '';
+    var named = (f.portions || []).filter(function (p) { return p.name !== 'gram'; })[0];
+    if (named) {
+      return prefix + round(nut.macrosFor(f, named.name, 1).kcal) +
+        ' kcal per ' + named.name;
+    }
+    return prefix + round(f.per_100g.kcal) + ' kcal / 100 g';
   }
 
   function emptyNote(text) {
@@ -1846,9 +1929,15 @@
       if (ev.key === 'Enter') { ev.preventDefault(); saveWeighIn(); }
     });
     $('addPortionBtn').addEventListener('click', function () { addPortionRow(); });
+    $('nutMode').addEventListener('click', function (ev) {
+      var b = ev.target.closest('button[data-mode]');
+      if (b) setNutMode(b.dataset.mode);
+    });
+    ['svName', 'svGrams', 'svKcal'].forEach(function (id) {
+      $(id).addEventListener('input', updateServingEcho);
+    });
     $('saveFoodBtn').addEventListener('click', saveFood);
     $('deleteFoodBtn').addEventListener('click', deleteFood);
-    $('convertBtn').addEventListener('click', convertServing);
 
     $('estimateBtn').addEventListener('click', runEstimate);
     $('saveSettingsBtn').addEventListener('click', saveSettings);

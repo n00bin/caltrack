@@ -126,6 +126,27 @@ function checkTrue(label, cond) {
   const reduced = nut.per100gFrom({ kcal: 1200, protein: 90, carbs: 60, fat: 45 }, 600);
   checkTrue('a reduced sauce is denser per 100 g', reduced.kcal > pot.kcal);
 
+  // --- typing a label per serving ---------------------------------------
+  // The promise the form makes: type what the label says about ONE serving,
+  // then log "1 slice" and get that number straight back.
+  const label = { kcal: 70, protein: 2, carbs: 13, fat: 1 };
+  const fromLabel = {
+    per_100g: nut.per100gFrom(label, 28),
+    portions: [{ name: 'slice', grams: 28 }, { name: 'gram', grams: 1 }]
+  };
+  check('one slice gives the label back', nut.macrosFor(fromLabel, 'slice', 1).kcal, 70);
+  check('protein too', nut.macrosFor(fromLabel, 'slice', 1).protein, 2);
+  check('two slices double it', nut.macrosFor(fromLabel, 'slice', 2).kcal, 140);
+  check('and grams still work underneath', nut.macrosFor(fromLabel, 'gram', 28).kcal, 70);
+
+  // Opening a saved food shows per-serving figures; saving converts them
+  // back. That round trip must not drift the stored numbers.
+  const roundTrip = nut.per100gFrom(
+    { kcal: Math.round(nut.macrosFor(fromLabel, 'slice', 1).kcal * 100) / 100,
+      protein: 0, carbs: 0, fat: 0 }, 28);
+  checkTrue('editing and re-saving does not move the number',
+    Math.abs(roundTrip.kcal - fromLabel.per_100g.kcal) < 0.05);
+
   // --- weigh to derive ---------------------------------------------------
   check('five slices weighing 140 g means 28 g each', nut.perUnitGrams(140, 5), 28);
   check('one item on the scale', nut.perUnitGrams(31.5, 1), 31.5);

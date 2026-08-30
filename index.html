@@ -292,42 +292,53 @@
       <input type="text" id="fBarcode" inputmode="numeric" placeholder="optional"></label>
     <p id="foodNotes" class="notes" hidden></p>
 
-    <h3>Per 100 g <span class="hint-inline">(off the nutrition label)</span></h3>
-    <div class="grid4">
-      <label class="field"><span>Calories</span>
-        <input type="number" id="fKcal" inputmode="decimal" step="any"></label>
-      <label class="field"><span>Protein g</span>
-        <input type="number" id="fProtein" inputmode="decimal" step="any"></label>
-      <label class="field"><span>Carbs g</span>
-        <input type="number" id="fCarbs" inputmode="decimal" step="any"></label>
-      <label class="field"><span>Fat g</span>
-        <input type="number" id="fFat" inputmode="decimal" step="any"></label>
+    <h3>Nutrition</h3>
+    <div class="segmented" id="nutMode">
+      <button data-mode="serving" class="is-active">Per serving</button>
+      <button data-mode="per100">Per 100 g</button>
     </div>
-    <details class="helper">
-      <summary>The label is per serving, not per 100 g</summary>
-      <div class="helper-body">
-        <p>Type the serving figures here and the weight of one serving, then
-          press Convert. It will do the maths and fill the boxes above.</p>
-        <div class="grid4">
-          <label class="field"><span>Serving g</span>
-            <input type="number" id="cvGrams" inputmode="decimal" step="any"></label>
-          <label class="field"><span>Calories</span>
-            <input type="number" id="cvKcal" inputmode="decimal" step="any"></label>
-          <label class="field"><span>Protein g</span>
-            <input type="number" id="cvProtein" inputmode="decimal" step="any"></label>
-          <label class="field"><span>Carbs g</span>
-            <input type="number" id="cvCarbs" inputmode="decimal" step="any"></label>
-          <label class="field"><span>Fat g</span>
-            <input type="number" id="cvFat" inputmode="decimal" step="any"></label>
-        </div>
-        <button id="convertBtn" class="btn">Convert to per 100 g</button>
-      </div>
-    </details>
 
-    <h3>Portions <span class="hint-inline">(how you actually count it)</span></h3>
-    <p class="hint">A slice, a cup, a bottle - whatever you'd say out loud.
-      Give each one a weight in grams and you can log "2 slices" forever after.
-      Grams is always available.</p>
+    <div id="servingPane">
+      <p class="hint">Copy this straight off the label, exactly as it's
+        written. The serving weight in grams is printed there too, usually in
+        brackets right after the serving size - "1 slice (28g)".</p>
+      <div class="grid4">
+        <label class="field"><span>A serving is one...</span>
+          <input type="text" id="svName" placeholder="slice"></label>
+        <label class="field"><span>...weighing (g)</span>
+          <input type="number" id="svGrams" inputmode="decimal" step="any"></label>
+        <label class="field"><span>Calories</span>
+          <input type="number" id="svKcal" inputmode="decimal" step="any"></label>
+        <label class="field"><span>Protein g</span>
+          <input type="number" id="svProtein" inputmode="decimal" step="any"></label>
+        <label class="field"><span>Carbs g</span>
+          <input type="number" id="svCarbs" inputmode="decimal" step="any"></label>
+        <label class="field"><span>Fat g</span>
+          <input type="number" id="svFat" inputmode="decimal" step="any"></label>
+      </div>
+      <p id="svEcho" class="hint"></p>
+    </div>
+
+    <div id="per100Pane" hidden>
+      <p class="hint">Most European labels are written this way. If yours is,
+        use these boxes instead.</p>
+      <div class="grid4">
+        <label class="field"><span>Calories</span>
+          <input type="number" id="fKcal" inputmode="decimal" step="any"></label>
+        <label class="field"><span>Protein g</span>
+          <input type="number" id="fProtein" inputmode="decimal" step="any"></label>
+        <label class="field"><span>Carbs g</span>
+          <input type="number" id="fCarbs" inputmode="decimal" step="any"></label>
+        <label class="field"><span>Fat g</span>
+          <input type="number" id="fFat" inputmode="decimal" step="any"></label>
+      </div>
+    </div>
+
+    <h3 id="portionsHead">Other ways you measure it
+      <span class="hint-inline">(optional)</span></h3>
+    <p class="hint" id="portionsHint">The serving above is already one way. Add
+      more if you measure it differently at different times - a cup as well as
+      a slice. Grams is always available without adding anything.</p>
     <div id="portionRows"></div>
     <button id="addPortionBtn" class="btn small">Add a portion</button>
 

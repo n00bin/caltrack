@@ -29,9 +29,9 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   on you log "2 slices" and it does the maths. Grams is always available.
   Don't know what a slice weighs? Press **Weigh**, put five on the scale, type
   5 and the reading, and it works out the rest.
-- **Foods** — your own library. Add, edit and delete. If a label is written
-  per serving instead of per 100 g, open "The label is per serving" and it
-  converts for you.
+- **Foods** — your own library. Add, edit and delete. The nutrition form asks
+  for **one serving**, exactly as an American label writes it, and works out
+  the rest. There's a per-100 g mode for European labels.
 - **Meals** — a saved list of food + quantity, tapped once instead of four
   times. Build one by picking from your library or by pressing **Scan one in**
   and pointing the camera at each packet in turn; anything new goes through
@@ -219,7 +219,11 @@ nothing else in the app changing.
 
 ## Data shapes
 
-Foods are stored per 100 g, which is the one unit that is never ambiguous:
+Foods are stored per 100 g, which is the one unit that is never ambiguous.
+That is a **storage** decision, not an interface one: nothing asks you to
+think in per-100 g. You type what the label says about one serving, and the
+app converts. Lists show "70 kcal per slice", not "265 kcal / 100 g", and
+per-100 g only appears for foods that have no serving to speak of.
 
 ```js
 {
