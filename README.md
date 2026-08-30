@@ -297,6 +297,36 @@ pulls ZXing from jsDelivr — pinned to one version and locked to a
 ever change. Nothing is fetched until someone actually opens the scanner on
 one of those browsers.
 
+## Checking your own library
+
+**Settings -> Check my foods** goes through everything saved and reports what
+looks wrong. It changes nothing; tapping a finding opens that food so you can
+fix it yourself.
+
+What it catches:
+
+- **Calories that disagree with the macros.** Protein and carbs are about
+  4 kcal a gram, fat about 9. When the two are more than 25% apart it is
+  almost always a mistyped number — fat entered as 33 instead of 3.3, say.
+- **Impossible values**: over 900 kcal per 100 g (pure fat is 900), macros
+  weighing more than the food, negatives, no calories at all.
+- **Odd portions**: a "cookie" recorded as 3 g, a "bowl" as 2.5 kg, a portion
+  with no weight.
+- **A drink measured in grams**, matched on the name.
+- **One barcode on two foods**, which makes scanning it ambiguous forever.
+
+**Also re-check against the databases** re-asks USDA and Open Food Facts about
+everything you scanned and flags where your figures differ by more than 5%.
+A difference is not automatically wrong — if you typed the packet in front of
+you and a volunteer uploaded something else, yours is the better number — but
+it is worth seeing.
+
+One honest limit, and there is a test asserting it: per-serving figures typed
+into the per-100 boxes are *self-consistent*, so no arithmetic can catch them.
+130 kcal with 2 g protein, 24 g carbs and 3 g fat is a perfectly sound-looking
+food; it just describes one biscuit rather than 100 g of them. Only the
+database cross-check finds those.
+
 ## Where your data lives
 
 In this browser's `localStorage`, on this device only. Nothing is uploaded and

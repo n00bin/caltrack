@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1831+6490552';
+  var BUILD = '2026-08-30.1836+e323a83';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1853,6 +1853,94 @@
 
   // ------------------------------------------------------------ settings
 
+  // ------------------------------------------------------ auditing foods
+
+  function renderFindings(findings, box) {
+    box.innerHTML = '';
+    if (!findings.length) {
+      box.appendChild(emptyNote('Nothing looks wrong.'));
+      return;
+    }
+
+    var order = { error: 0, warn: 1, note: 2 };
+    findings.slice().sort(function (a, b) {
+      return order[a.severity] - order[b.severity];
+    }).forEach(function (f) {
+      var row = document.createElement('div');
+      row.className = 'entry';
+
+      var main = document.createElement('div');
+      main.className = 'entry-main';
+
+      var name = document.createElement('div');
+      name.className = 'entry-name';
+      name.textContent = f.name;
+
+      var msg = document.createElement('div');
+      msg.className = 'entry-sub';
+      msg.textContent = f.message + (f.detail ? ' ' + f.detail : '');
+
+      main.appendChild(name);
+      main.appendChild(msg);
+
+      var badge = document.createElement('span');
+      badge.className = 'badge badge-' +
+        (f.severity === 'error' ? 'confirmed' : f.severity === 'warn' ? 'watch' : 'ok');
+      badge.textContent = f.severity === 'error' ? 'wrong'
+        : f.severity === 'warn' ? 'check' : 'note';
+
+      row.appendChild(main);
+      row.appendChild(badge);
+
+      // Straight to the food, so a fix is one tap away.
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', function () {
+        store.foods.get(f.id).then(function (food) {
+          if (food) openFoodSheet(food);
+        });
+      });
+
+      box.appendChild(row);
+    });
+  }
+
+  function runAudit() {
+    var msg = $('auditMsg');
+    clearMsg(msg);
+    store.foods.all().then(function (foods) {
+      if (!foods.length) { msg.textContent = 'No foods saved yet.'; return; }
+      var findings = CalTrack.audit.local(foods);
+      var counts = CalTrack.audit.summarise(findings);
+      msg.textContent = 'Checked ' + foods.length + ' food' +
+        (foods.length === 1 ? '' : 's') + ': ' + counts.error + ' wrong, ' +
+        counts.warn + ' worth checking, ' + counts.note + ' notes.';
+      renderFindings(findings, $('auditResults'));
+    });
+  }
+
+  function runOnlineAudit() {
+    var msg = $('auditMsg');
+    clearMsg(msg);
+    store.foods.all().then(function (foods) {
+      var scanned = foods.filter(function (f) { return f.barcode; });
+      if (!scanned.length) { msg.textContent = 'Nothing in your library was scanned.'; return; }
+
+      msg.textContent = 'Re-checking ' + scanned.length + '...';
+      return CalTrack.audit.online(foods, state.settings, function (done, total, name) {
+        msg.textContent = 'Re-checking ' + done + ' of ' + total + ': ' + name;
+      }).then(function (findings) {
+        var local = CalTrack.audit.local(foods);
+        var all = local.concat(findings);
+        var counts = CalTrack.audit.summarise(all);
+        msg.textContent = 'Checked ' + foods.length + ' food' +
+          (foods.length === 1 ? '' : 's') + ', ' + scanned.length + ' against the ' +
+          'databases: ' + counts.error + ' wrong, ' + counts.warn +
+          ' worth checking, ' + counts.note + ' notes.';
+        renderFindings(all, $('auditResults'));
+      });
+    }).catch(function (err) { showError(msg, err.message); });
+  }
+
   // ------------------------------------------------------- offline support
 
   /* The service worker is what lets the app open with no signal. It is
@@ -2260,6 +2348,8 @@
     $('deleteFoodBtn').addEventListener('click', deleteFood);
 
     $('estimateBtn').addEventListener('click', runEstimate);
+    $('auditBtn').addEventListener('click', runAudit);
+    $('auditOnlineBtn').addEventListener('click', runOnlineAudit);
     $('saveUsdaKey').addEventListener('click', saveUsdaKey);
     $('testUsdaKey').addEventListener('click', testUsdaKey);
     $('saveSettingsBtn').addEventListener('click', saveSettings);

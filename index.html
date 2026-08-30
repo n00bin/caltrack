@@ -193,6 +193,19 @@
     </div>
 
     <div class="card">
+      <h2>Check my foods</h2>
+      <p class="hint">Goes through everything in your library looking for
+        mistakes: calories that do not match the macros, portions that are the
+        wrong size, a barcode on two foods. It can also re-ask the databases
+        about anything you scanned and tell you where your figures differ from
+        theirs. It only reports - nothing is changed.</p>
+      <button id="auditBtn" class="btn primary wide">Check my foods</button>
+      <button id="auditOnlineBtn" class="btn wide">Also re-check against the databases</button>
+      <p id="auditMsg" class="msg"></p>
+      <div id="auditResults"></div>
+    </div>
+
+    <div class="card">
       <h2>Backup</h2>
       <p class="hint">Your data lives in this browser only. If you clear site
         data or switch phones it is gone, so export a copy now and then.</p>
@@ -417,6 +430,7 @@
 <script src="store.js"></script>
 <script src="scan.js"></script>
 <script src="usda.js"></script>
+<script src="audit.js"></script>
 <script src="trend.js"></script>
 <script src="app.js"></script>
 </body>
