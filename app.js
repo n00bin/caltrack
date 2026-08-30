@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1627+3ff2421';
+  var BUILD = '2026-08-30.1640+b7faa37';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -581,6 +581,8 @@
       ['svKcal', 'svProtein', 'svCarbs', 'svFat'].forEach(function (id) { $(id).value = ''; });
     }
 
+    showServingSuggestion(serving);
+
     /* Whatever nutrition we already hold - from a scan, or from the saved
      * food - becomes the REFERENCE, so changing the portion weight can
      * recalculate the figures instead of asking for them again.
@@ -729,6 +731,48 @@
         'brackets right after the serving size - "1 slice (28g)". If your label ' +
         'is written per 100 g, put 100 in the weight box and copy it as it is.';
     }
+  }
+
+  /* When the database lost the serving size, the leftover decimals often
+   * give it away. Offer what they imply, with the working shown, and let the
+   * user check it against the packet before it goes anywhere.
+   */
+  function showServingSuggestion(serving) {
+    var box = $('svSuggest');
+    box.innerHTML = '';
+    box.hidden = true;
+    if (serving || !state.refPer100) return;
+
+    var guess = CalTrack.off.inferServing(state.refPer100);
+    if (!guess) return;
+
+    var text = document.createElement('p');
+    text.className = 'hint';
+    text.style.margin = '0 0 8px';
+    text.textContent = 'These figures look like they were typed from a ' +
+      guess.grams + ' g serving: ' + guess.kcal + ' kcal, ' + guess.protein +
+      ' g protein, ' + guess.carbs + ' g carbs, ' + guess.fat + ' g fat. ' +
+      'Check that against the packet before you use it.';
+
+    var use = document.createElement('button');
+    use.type = 'button';
+    use.className = 'btn small';
+    use.textContent = 'Use ' + guess.grams + ' g';
+    use.addEventListener('click', function () {
+      $('svGrams').value = guess.grams;
+      $('svKcal').value = guess.kcal;
+      $('svProtein').value = guess.protein;
+      $('svCarbs').value = guess.carbs;
+      $('svFat').value = guess.fat;
+      state.svTouched = true;         // these are label figures now, not derived
+      box.hidden = true;
+      updateServingEcho();
+      $('svName').focus();
+    });
+
+    box.appendChild(text);
+    box.appendChild(use);
+    box.hidden = false;
   }
 
   /* Type "28 g" against a food whose nutrition we already have, and the four

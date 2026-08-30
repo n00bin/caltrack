@@ -453,6 +453,86 @@ CalTrack.off = (function () {
     };
   }
 
+  /* Recover a serving size that the database lost.
+   *
+   * Volunteers usually type an American label, which is written per serving.
+   * Open Food Facts stores the per-100 g conversion and sometimes drops the
+   * serving field entirely - leaving figures like 419.35483870968 kcal, which
+   * is 130 divided by 31 and multiplied by 100. The awkward decimals are the
+   * fingerprint of the serving weight, so it can be read back out.
+   *
+   * Labels round hard: American ones give calories to a whole number and
+   * macros to the nearest half gram. So the right weight is the one that
+   * turns all four figures back into label-shaped numbers at once. Returns
+   * the smallest weight that does, or null when nothing fits - it is offered
+   * as a suggestion to confirm against the packet, never applied silently.
+   */
+  function nearestStep(v, step) {
+    return Math.abs(v - Math.round(v / step) * step);
+  }
+
+  // Values arrive as x/y*100 divisions, so they land a hair off the mark.
+  var TOL = 0.03;
+
+  function labelShaped(kcal, macros) {
+    if (nearestStep(kcal, 1) > TOL) return false;
+    for (var i = 0; i < macros.length; i++) {
+      if (nearestStep(macros[i], 0.5) > TOL) return false;
+    }
+    return true;
+  }
+
+  function inferServing(per) {
+    if (!per || !(per.kcal > 0)) return null;
+
+    var flat = [per.protein || 0, per.carbs || 0, per.fat || 0];
+
+    /* If the per-100 g figures are ALREADY label-shaped, they were almost
+     * certainly typed per 100 g and there is no lost serving to recover.
+     * Guessing here produced nonsense - a "500 g serving" of chocolate
+     * spread - so this leaves those alone.
+     */
+    if (labelShaped(per.kcal, flat)) return null;
+
+    /* Half of a serving fits just as neatly as the serving does, so the
+     * smallest match is not automatically the right one. Labels state whole
+     * grams far more often than halves, so the fit with the most whole
+     * numbers wins, and the smaller weight only breaks a tie.
+     */
+    var best = null;
+
+    for (var g = 10; g <= 250; g++) {          // beyond this it is not a serving
+      if (g === 100) continue;                 // restating per 100 g helps nobody
+      var f = g / 100;
+      var kcal = per.kcal * f;
+      if (kcal < 15 || kcal > 900) continue;
+      if (nearestStep(kcal, 1) > TOL) continue;
+
+      var macros = [flat[0] * f, flat[1] * f, flat[2] * f];
+      var hits = 0, whole = 0;
+      for (var i = 0; i < macros.length; i++) {
+        if (nearestStep(macros[i], 0.5) <= TOL) hits++;
+        if (nearestStep(macros[i], 1) <= TOL) whole++;
+      }
+      if (hits < 3) continue;                  // all three have to line up
+
+      if (!best || whole > best.whole) {
+        best = {
+          whole: whole,
+          grams: g,
+          kcal: Math.round(kcal),
+          protein: Math.round(macros[0] * 2) / 2,
+          carbs: Math.round(macros[1] * 2) / 2,
+          fat: Math.round(macros[2] * 2) / 2
+        };
+      }
+    }
+
+    if (!best) return null;
+    delete best.whole;
+    return best;
+  }
+
   // Resolves to a draft food, or null when the product is not in the database.
   function lookup(barcode) {
     var code = String(barcode).trim();
@@ -468,6 +548,7 @@ CalTrack.off = (function () {
     // exported for the tests
     _parseServing: parseServing,
     _servingFrom: servingFrom,
+    inferServing: inferServing,
     _servingMacrosFrom: servingMacrosFrom,
     _draftFrom: draftFrom,
     _kcalPer100g: kcalPer100g,

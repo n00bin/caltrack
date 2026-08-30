@@ -90,6 +90,20 @@ and leaves the boxes empty for you to read off the packet. It does **not**
 invent a 100 g serving: that looked like captured data and disagreed with the
 label, which is worse than an honest blank.
 
+**Recovering a lost serving size.** Volunteers usually type an American label,
+which is written per serving; Open Food Facts stores the per-100 g conversion
+and sometimes drops the serving field. The division leaves a fingerprint.
+Honey Graham Crackers (`842798105464`) comes back as 419.35483870968 kcal per
+100 g — which is 130 divided by 31, times 100. So when there is no serving on
+record, the app looks for the weight that turns all four figures back into
+label-shaped numbers at once, and *offers* it: "these look like they were
+typed from a 31 g serving: 130 kcal, 2 g protein, 24 g carbs, 3 g fat".
+
+It is a suggestion with the working shown, never applied silently, and it
+refuses to guess when the per-100 g figures are already label-shaped — those
+were typed per 100 g and have no lost serving to find. Without that rule it
+proposed a "500 g serving" of chocolate spread.
+
 So the app treats a miss as an ordinary outcome rather than a failure, and it
 never saves a scanned result behind your back — you always see the form first.
 Scanning is a shortcut past typing, not a source of truth. The upside is that

@@ -186,6 +186,44 @@ const empty = off._draftFrom({ product_name: 'Mystery', nutriments: {} }, '111')
 eq('kcal zero', empty.per_100g.kcal, 0);
 ok('missing calories flagged', /calorie/.test(empty.notes.join(' ')));
 
+// --- recovering a serving size the database lost ------------------------
+/* Barcode 842798105464, Honey Graham Crackers, as the live API returns it:
+ * no serving_size, no serving_quantity, no *_serving figures - only
+ * per-100 g values full of repeating decimals. Those decimals are 130/31,
+ * 2/31, 24/31 and 3/31 scaled up, so the lost serving can be read back out.
+ */
+{
+  const grahams = {
+    kcal: 419.35483870968, protein: 6.4516129032258,
+    carbs: 77.41935483871, fat: 9.6774193548387
+  };
+  const g = off.inferServing(grahams);
+  eq('recovers the 31 g serving', g.grams, 31);
+  eq('and its calories', g.kcal, 130);
+  eq('protein', g.protein, 2);
+  eq('carbs', g.carbs, 24);
+  eq('fat', g.fat, 3);
+}
+
+// Half a serving fits just as neatly, so the most whole-numbered fit wins.
+eq('a 28 g serving is not reported as 14 g',
+  off.inferServing({ kcal: 150 / 0.28, protein: 1 / 0.28, carbs: 16 / 0.28, fat: 9 / 0.28 }).grams, 28);
+eq('a 55 g serving', off.inferServing(
+  { kcal: 210 / 0.55, protein: 5 / 0.55, carbs: 33 / 0.55, fat: 7 / 0.55 }).grams, 55);
+
+/* Figures that are already label-shaped were typed per 100 g, so there is
+ * no lost serving to find. Guessing anyway produced a "500 g serving" of
+ * chocolate spread, which is why this case is refused outright.
+ */
+eq('clean per-100g data yields no guess',
+  off.inferServing({ kcal: 539, protein: 6.3, carbs: 57.5, fat: 30.9 }), null);
+eq('nor for crisps', off.inferServing({ kcal: 536, protein: 3.5, carbs: 57, fat: 32 }), null);
+eq('nor for cereal', off.inferServing({ kcal: 393, protein: 7.1, carbs: 79, fat: 5.4 }), null);
+eq('and noise stays refused',
+  off.inferServing({ kcal: 317.4159, protein: 2.7183, carbs: 11.313, fat: 4.1421 }), null);
+eq('no calories, no guess', off.inferServing({ kcal: 0 }), null);
+eq('nothing at all', off.inferServing(null), null);
+
 // --- a real 404 from the live API ---------------------------------------
 const missing = JSON.parse(fs.readFileSync(__dirname + '/test-fixtures/off-not-found.json', 'utf8'));
 eq('status 0 means not found', missing.status, 0);
