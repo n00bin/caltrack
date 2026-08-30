@@ -57,6 +57,26 @@ function checkTrue(label, cond) {
   check('name trimmed', junk.name, 'Mayo');
   check('bad portions dropped (tbsp + gram)', junk.portions.length, 2);
 
+  // --- drinks are measured by volume ------------------------------------
+  // The arithmetic is identical - one unit in, one unit out - but the food
+  // has to remember which unit the screens should print.
+  const milk = await store.foods.insert({
+    name: 'Milk', basis: 'volume',
+    per_100g: { kcal: 61, protein: 3.2, carbs: 4.8, fat: 3.3 },
+    portions: [{ name: 'cup', grams: 240 }]
+  });
+  check('basis is kept', milk.basis, 'volume');
+  check('a 240 ml cup', nut.gramsFor(milk, 'cup', 1), 240);
+  check('and its calories', nut.macrosFor(milk, 'cup', 1).kcal, 61 * 2.4);
+
+  const solid = await store.foods.insert({
+    name: 'Cheese', per_100g: { kcal: 400, protein: 25, carbs: 1, fat: 33 }
+  });
+  check('weight is the default', solid.basis, 'weight');
+  check('junk basis falls back to weight',
+    (await store.foods.insert({ name: 'X', basis: 'nonsense', per_100g: { kcal: 1 } })).basis,
+    'weight');
+
   // --- log entries + totals --------------------------------------------
   const m = nut.macrosFor(bread, 'slice', 2);
   await store.log.insert({
@@ -187,7 +207,7 @@ function checkTrue(label, cond) {
   await store.clearAll();
   check('cleared', (await store.foods.all()).length, 0);
   await store.importAll(dump);
-  check('foods restored', (await store.foods.all()).length, 2);
+  check('foods restored', (await store.foods.all()).length, 5);
   check('log restored', (await store.log.all()).length, 2);
   check('settings restored', (await store.getSettings()).target_kcal, 2000);
 

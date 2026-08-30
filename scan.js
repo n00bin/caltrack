@@ -452,6 +452,9 @@ CalTrack.off = (function () {
       },
       portions: built.portions,
       source: 'openfoodfacts',
+      basis: (serving && serving.fromVolume) ||
+        String(product.nutrition_data_per || '').indexOf('ml') !== -1
+        ? 'volume' : 'weight',
       // The label's own serving figures, for the form to show verbatim.
       // Not stored on the food; per_100g above is what gets saved.
       serving: serving,

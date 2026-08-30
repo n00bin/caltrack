@@ -173,6 +173,14 @@ Scanning is a shortcut past typing, not a source of truth. The upside is that
 you only pay the cost once per product: after that the barcode is in your own
 library and a scan goes straight to the amount box.
 
+**Drinks are measured in millilitres, not grams.** A carton says 240 ml, so
+printing "240 g" against it is wrong — and it bites later, because 240 ml of
+milk weighs about 247 g. Every food now records whether it is measured by
+weight or by volume, and the screens print `g` or `ml` accordingly. The
+arithmetic is unchanged: nutrition for a drink is recorded per 100 ml, so one
+unit in gives one unit out either way. Logging a drink by millilitres is
+exact; weighing it instead is off by whatever it is denser than water.
+
 Two deliberate refusals in the parsing, both covered by tests:
 
 - A serving of `3/4 cup (28 g)` is stored as a 28 g portion called "serving",

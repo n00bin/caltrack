@@ -161,6 +161,7 @@ CalTrack.usda = (function () {
       per_100g: per100,
       portions: portions,
       source: 'usda',
+      basis: (size && size.fromVolume) ? 'volume' : 'weight',
       serving: serving,
       notes: notes,
       usable: !!(macros && size)

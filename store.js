@@ -104,6 +104,13 @@ CalTrack.store = (function () {
     f.brand = (f.brand || '').trim();
     f.barcode = f.barcode ? String(f.barcode).trim() : null;
     f.source = f.source || 'manual';
+    /* Drinks are recorded per 100 ml, not per 100 g. The arithmetic is
+     * identical either way - one unit in, one unit out - so a millilitre is
+     * stored in the same field a gram is. This only changes what the screens
+     * CALL that unit, which matters: printing "240 g" against a carton that
+     * says 240 ml is wrong, and weighing 240 ml of milk gives about 247 g.
+     */
+    f.basis = (f.basis === 'volume') ? 'volume' : 'weight';
     if (!('user_id' in f)) f.user_id = null;
     return f;
   }

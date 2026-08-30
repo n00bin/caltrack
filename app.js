@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1819+16a27f2';
+  var BUILD = '2026-08-30.1831+6490552';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -32,6 +32,7 @@
     refPer100: null,         // nutrition already known, from a scan or a save
     svTouched: false,        // has the user overridden the derived figures?
     svFromData: false,       // the serving weight came from a lookup, not a guess
+    foodBasis: 'weight',     // 'volume' for drinks, so screens say ml not g
     dayTotal: 0,             // kcal already logged on the day being shown
     editingMealId: null,
     mealItemAfterSave: false,
@@ -83,6 +84,18 @@
   function round(n, places) {
     var f = Math.pow(10, places || 0);
     return Math.round(n * f) / f;
+  }
+
+  /* What to call the unit on screen. Grams for food, millilitres for
+   * drinks - the number is the same either way.
+   */
+  function unitOf(food) {
+    return (food && food.basis === 'volume') ? 'ml' : 'g';
+  }
+
+  function unitWord(food, plural) {
+    if (food && food.basis === 'volume') return plural ? 'millilitres' : 'millilitre';
+    return plural ? 'grams' : 'gram';
   }
 
   function foodLabel(food) {
@@ -261,7 +274,7 @@
       var grams = food ? nut.gramsFor(food, entry.portion, entry.qty) : null;
       var qtyText = round(entry.qty, 2) + ' ' + plural(entry.portion, entry.qty);
       sub.textContent = (grams !== null && entry.portion !== 'gram')
-        ? qtyText + '  (' + round(grams) + ' g)'
+        ? qtyText + '  (' + round(grams) + ' ' + unitOf(food) + ')'
         : qtyText;
     }
 
@@ -449,8 +462,8 @@
       var opt = document.createElement('option');
       opt.value = p.name;
       opt.textContent = p.name === 'gram'
-        ? 'grams'
-        : p.name + ' (' + round(p.grams, 1) + ' g)';
+        ? unitWord(food, true)
+        : p.name + ' (' + round(p.grams, 1) + ' ' + unitOf(food) + ')';
       sel.appendChild(opt);
     });
 
@@ -474,7 +487,7 @@
     var fits = leftAfter(m.kcal);
     $('qtyPreview').innerHTML =
       '<b>' + round(m.kcal) + '</b> kcal<br>' +
-      round(grams, 1) + ' g  -  ' +
+      round(grams, 1) + ' ' + unitOf(food) + '  -  ' +
       round(m.protein, 1) + ' g protein, ' +
       round(m.carbs, 1) + ' g carbs, ' +
       round(m.fat, 1) + ' g fat' +
@@ -571,6 +584,10 @@
      * is one serving", and a serving is often two of something anyway - the
      * packet says "2 sheets". Blank means it is simply called a serving.
      */
+    state.foodBasis = (food && food.basis === 'volume') ? 'volume' : 'weight';
+    var unit = unitOf({ basis: state.foodBasis });
+    $('svGramsLabel').textContent = 'One serving is (' + unit + ')';
+
     var realName = serving && serving.name !== 'serving' ? serving.name : '';
     $('svName').value = realName;
     $('svGrams').value = prefillGrams;
@@ -643,7 +660,7 @@
     grams.type = 'number';
     grams.step = 'any';
     grams.inputMode = 'decimal';
-    grams.placeholder = 'grams';
+    grams.placeholder = unitWord({ basis: state.foodBasis }, true);
     grams.className = 'p-grams';
     grams.value = portion ? portion.grams : '';
 
@@ -767,7 +784,14 @@
     text.className = 'hint';
     text.style.margin = '0';
 
-    if (serving && serving.label) {
+    if (state.foodBasis === 'volume') {
+      text.textContent = 'This is a drink, so everything here is in millilitres ' +
+        'rather than grams - the nutrition is recorded per 100 ml' +
+        (serving && serving.label ? ', and the label calls one serving "' +
+          serving.label + '"' : '') +
+        '. Logging it by millilitres is exact. If you weigh it instead, milk is ' +
+        'about 3% heavier than the same volume of water.';
+    } else if (serving && serving.label) {
       // "2 sheets (31 g)" or "2 full" - what the packet actually says, which
       // is far more use than a bare weight when you are holding the box.
       text.textContent = 'The label calls one serving "' + serving.label +
@@ -869,6 +893,7 @@
       name: name,
       brand: $('fBrand').value.trim(),
       barcode: $('fBarcode').value.trim() || null,
+      basis: state.foodBasis,
       per_100g: per100,
       portions: portions,
       source: 'manual'
@@ -944,9 +969,9 @@
     var named = (f.portions || []).filter(function (p) { return p.name !== 'gram'; })[0];
     if (named) {
       return prefix + round(nut.macrosFor(f, named.name, 1).kcal) +
-        ' kcal per ' + named.name;
+        ' kcal per ' + (named.name === 'serving' ? 'serving' : named.name);
     }
-    return prefix + round(f.per_100g.kcal) + ' kcal / 100 g';
+    return prefix + round(f.per_100g.kcal) + ' kcal / 100 ' + unitOf(f);
   }
 
   function emptyNote(text) {
