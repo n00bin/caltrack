@@ -53,6 +53,10 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   against the loss the scale actually shows, and raises a tiered, honestly
   worded alert. If it's confident, it offers two levers — eat less, or move
   more — and applies neither without you pressing the button.
+- **Work out a target for me** — on day one you have no data, so Settings can
+  estimate one from your weight, height, age and activity. It's labelled as a
+  formula rather than a measurement, and the Trend screen tells you how far
+  out it was once there's enough logged to know.
 - **Settings** — a daily calorie target, a goal weight, the rate you're aiming
   for, plus backup export/restore.
 
@@ -88,7 +92,7 @@ Two deliberate refusals in the parsing, both covered by tests:
 ## The maths, and one deliberate change to the plan
 
 `trend.js` holds all of it, touches neither the DOM nor storage, and is
-covered by 61 checks against synthetic data where the right answer is known
+covered by 93 checks against synthetic data where the right answer is known
 in advance — including the plan's own worked example (2,100 kcal a day and
 2 lb lost over 28 days gives a TDEE of 2,350).
 
@@ -104,6 +108,21 @@ So the change is measured with a least-squares fit through the weigh-ins
 instead. No warm-up, uses every reading rather than two, and it's what the
 flat-trend test needs anyway. The EMA is still what you see on the chart.
 There's a test that fails if endpoint differencing is ever put back.
+
+**The starting target.** A formula can't tell you your burn rate, but it can
+give you somewhere to stand for the first fortnight. Settings uses
+**Mifflin-St Jeor** — the usual choice, typically within about 10%, which is
+200-odd calories and therefore the whole difference between losing and not —
+times a standard activity multiplier. If you know your body fat percentage it
+uses **Katch-McArdle** instead, which works from lean mass and needs neither
+your age nor a male/female term.
+
+The app is explicit that this is scaffolding. It shows the caveat next to the
+number, and it prefers real data everywhere: an accepted burn rate beats a
+measurement, a measurement beats the formula, the formula beats nothing.
+There's a test asserting exactly that order. Once the measured figure is
+trustworthy, the Trend screen says how far off the estimate was and replaces
+it.
 
 **Things it refuses to do:**
 
@@ -190,7 +209,7 @@ there are no accounts yet. That means:
 | `tools/make-icons.py` | Regenerates `icons/` if the mark ever changes. |
 
 All three run without a browser and without a network: `node test-store.js &&
-node test-scan.js && node test-trend.js && node test-shell.js` is 174
+node test-scan.js && node test-trend.js && node test-shell.js` is 206
 checks in about a second.
 
 `store.js` is deliberately walled off, and every one of its functions returns a

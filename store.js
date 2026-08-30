@@ -32,7 +32,15 @@ CalTrack.store = (function () {
     target_rate_lbs_per_week: null,
     height_in: null,
     target_kcal: null,
-    tdee_override: null
+    tdee_override: null,      // a burn rate the user has accepted as real
+    // Used only to seed a starting target before there is enough logged
+    // to measure one properly.
+    age: null,
+    sex: null,
+    activity_level: null,
+    body_fat_pct: null,
+    estimated_tdee: null,
+    min_kcal: null            // overrides the default target floor
   };
 
   // --- low-level localStorage access ------------------------------------

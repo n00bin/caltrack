@@ -131,6 +131,46 @@
     </div>
 
     <div class="card">
+      <h2>Work out a target for me</h2>
+      <p class="hint">If you don't know where to start, this estimates your
+        burn rate from your body and how active you are. It is a formula, not
+        a measurement — it gets you through the first fortnight, and then the
+        Trend screen replaces it with your real number.</p>
+
+      <div class="grid4">
+        <label class="field"><span>Current weight (lbs)</span>
+          <input type="number" id="estWeight" inputmode="decimal" step="0.1"></label>
+        <label class="field"><span>Age</span>
+          <input type="number" id="estAge" inputmode="numeric"></label>
+        <label class="field"><span>Height (feet)</span>
+          <input type="number" id="estFeet" inputmode="numeric"></label>
+        <label class="field"><span>and inches</span>
+          <input type="number" id="estInches" inputmode="numeric"></label>
+      </div>
+
+      <label class="field"><span>Formula</span>
+        <select id="estSex">
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+        </select>
+      </label>
+
+      <label class="field"><span>How active are you?</span>
+        <select id="estActivity"></select>
+      </label>
+
+      <label class="field"><span>Body fat % (optional)</span>
+        <input type="number" id="estBodyFat" inputmode="decimal" step="0.1"
+               placeholder="leave blank if you don't know"></label>
+      <p class="hint">Only fill that in if you've actually had it measured. If
+        you do, it switches to a formula based on lean mass, which needs
+        neither your age nor the choice above.</p>
+
+      <button id="estimateBtn" class="btn primary wide">Work it out</button>
+      <div id="estimateResult"></div>
+    </div>
+
+    <div class="card">
       <h2>Backup</h2>
       <p class="hint">Your data lives in this browser only. If you clear site
         data or switch phones it is gone, so export a copy now and then.</p>

@@ -1133,6 +1133,22 @@
     box.appendChild(big);
     box.appendChild(badge);
     box.appendChild(detail);
+
+    // The handover: once there is a real measurement, say how far the
+    // formula that got you started actually was.
+    var est = state.settings.estimated_tdee;
+    if (est && m.confidence !== 'none') {
+      var diff = Math.round(m.tdee - est);
+      var handover = document.createElement('p');
+      handover.className = 'notes';
+      handover.textContent = Math.abs(diff) < 50
+        ? 'The starting estimate said ' + round(est) + '. It was close. This ' +
+          'measured figure is the one to trust from here.'
+        : 'The starting estimate said ' + round(est) + ', so the formula was out by ' +
+          Math.abs(diff) + ' kcal ' + (diff > 0 ? 'low' : 'high') +
+          '. This measured figure replaces it.';
+      box.appendChild(handover);
+    }
   }
 
   function renderPlateau(p, measured) {
@@ -1532,6 +1548,126 @@
     $('setTargetRate').value = state.settings.target_rate_lbs_per_week || '';
     clearMsg($('settingsMsg'));
     clearMsg($('backupMsg'));
+    fillEstimator();
+  }
+
+  // ---------------------------------------------- working out a target
+
+  function fillEstimator() {
+    var s = state.settings;
+
+    var sel = $('estActivity');
+    if (!sel.options.length) {
+      Object.keys(CalTrack.trend.ACTIVITY).forEach(function (key) {
+        var opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = CalTrack.trend.ACTIVITY[key].label;
+        sel.appendChild(opt);
+      });
+    }
+    sel.value = s.activity_level || 'sedentary';
+
+    $('estAge').value = s.age || '';
+    $('estSex').value = s.sex || 'male';
+    $('estBodyFat').value = s.body_fat_pct || '';
+
+    if (s.height_in) {
+      $('estFeet').value = Math.floor(s.height_in / 12);
+      $('estInches').value = Math.round(s.height_in % 12);
+    }
+
+    // Prefill the weight from the most recent weigh-in rather than asking
+    // for something the app already knows.
+    if (!$('estWeight').value) {
+      store.weighIns.all().then(function (rows) {
+        if (!rows.length) return;
+        var latest = rows.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; })[0];
+        $('estWeight').value = latest.weight_lbs;
+      });
+    }
+  }
+
+  function readProfile() {
+    var feet = parseFloat($('estFeet').value) || 0;
+    var inches = parseFloat($('estInches').value) || 0;
+    return {
+      weightLbs: parseFloat($('estWeight').value),
+      age: parseFloat($('estAge').value),
+      heightIn: (feet * 12) + inches,
+      sex: $('estSex').value,
+      activity: $('estActivity').value,
+      bodyFatPct: parseFloat($('estBodyFat').value)
+    };
+  }
+
+  function runEstimate() {
+    var box = $('estimateResult');
+    box.innerHTML = '';
+
+    var profile = readProfile();
+    var result = CalTrack.trend.suggestTarget(profile, state.settings);
+
+    if (result.error) {
+      var err = document.createElement('p');
+      err.className = 'msg err';
+      err.textContent = result.error;
+      box.appendChild(err);
+      return;
+    }
+
+    var big = document.createElement('div');
+    big.className = 'bignum';
+    big.innerHTML = '<b>' + result.target + '</b> kcal a day';
+    box.appendChild(big);
+
+    var how = document.createElement('p');
+    how.className = 'hint';
+    how.textContent = result.formula + ' puts your resting burn at ' + result.bmr +
+      ' kcal. ' + result.activityLabel + ' multiplies that by ' + result.multiplier +
+      ', giving about ' + result.tdee + ' a day. Taking off ' + result.deficit +
+      ' for ' + result.ratePerWeek + ' lb a week leaves ' + result.target + '.';
+    box.appendChild(how);
+
+    if (result.cappedAtFloor) {
+      var capped = document.createElement('p');
+      capped.className = 'notes';
+      capped.textContent = 'That rate would put you below a sensible floor, so ' +
+        'this is the floor (' + result.floor + ') instead. Either aim for a ' +
+        'slower loss, or add activity rather than cutting further.';
+      box.appendChild(capped);
+    }
+
+    var caveat = document.createElement('p');
+    caveat.className = 'notes';
+    caveat.textContent = result.caveat;
+    box.appendChild(caveat);
+
+    var use = document.createElement('button');
+    use.className = 'btn primary wide';
+    use.textContent = 'Use ' + result.target + ' as my target';
+    use.addEventListener('click', function () { applyEstimate(profile, result); });
+    box.appendChild(use);
+  }
+
+  function applyEstimate(profile, result) {
+    store.saveSettings({
+      target_kcal: result.target,
+      // Kept so the form comes back filled in, and so the Trend screen can
+      // say when the measured figure has overtaken the estimate.
+      age: profile.age || null,
+      sex: profile.sex,
+      height_in: profile.heightIn || null,
+      activity_level: profile.activity,
+      body_fat_pct: isFinite(profile.bodyFatPct) ? profile.bodyFatPct : null,
+      estimated_tdee: result.tdee,
+      // Without a rate the app cannot work out what deficit the target
+      // implies, so the one used in the sum gets written down.
+      target_rate_lbs_per_week: state.settings.target_rate_lbs_per_week || result.ratePerWeek
+    }).then(function (s) {
+      state.settings = s;
+      renderSettings();
+      toast('Target set to ' + result.target);
+    });
   }
 
   function saveSettings() {
@@ -1714,6 +1850,7 @@
     $('deleteFoodBtn').addEventListener('click', deleteFood);
     $('convertBtn').addEventListener('click', convertServing);
 
+    $('estimateBtn').addEventListener('click', runEstimate);
     $('saveSettingsBtn').addEventListener('click', saveSettings);
     $('exportBtn').addEventListener('click', exportBackup);
     $('importBtn').addEventListener('click', function () { $('importFile').click(); });

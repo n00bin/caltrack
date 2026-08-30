@@ -220,6 +220,7 @@ CalTrack.trend = (function () {
     settings = settings || {};
     if (settings.tdee_override > 0) return settings.tdee_override;
     if (measured && measured.tdee && measured.confidence !== 'none') return measured.tdee;
+    if (settings.estimated_tdee > 0) return settings.estimated_tdee;
     if (settings.target_kcal > 0 && settings.target_rate_lbs_per_week > 0) {
       return settings.target_kcal + (settings.target_rate_lbs_per_week * KCAL_PER_LB / 7);
     }
@@ -352,6 +353,32 @@ CalTrack.trend = (function () {
 
   // ------------------------------------------------------------ adjustment
 
+  // How low a target is allowed to go, whatever the arithmetic says.
+  function floorFor(tdee, settings) {
+    settings = settings || {};
+    return Math.max(
+      settings.min_kcal > 0 ? settings.min_kcal : DEFAULT_FLOOR_KCAL,
+      tdee * MIN_FRACTION_OF_TDEE
+    );
+  }
+
+  // Burn rate + the rate you want to lose at -> what to eat, floored.
+  function targetFor(tdee, settings) {
+    settings = settings || {};
+    var rate = settings.target_rate_lbs_per_week > 0 ? settings.target_rate_lbs_per_week : 1;
+    var wantedDeficit = rate * KCAL_PER_LB / 7;
+    var floor = floorFor(tdee, settings);
+    var ideal = tdee - wantedDeficit;
+    var capped = ideal < floor;
+    return {
+      target: Math.round(capped ? floor : ideal),
+      floor: Math.round(floor),
+      cappedAtFloor: capped,
+      ratePerWeek: rate,
+      deficit: Math.round(wantedDeficit)
+    };
+  }
+
   /* Two levers, as the plan asks: eat less, or move more. Never drops the
    * target through the floor - past that point the answer is a diet break,
    * not a smaller number, and the caller is told so.
@@ -361,35 +388,112 @@ CalTrack.trend = (function () {
     var settings = opts.settings || {};
     if (!(tdee > 0)) return null;
 
-    var rate = settings.target_rate_lbs_per_week > 0 ? settings.target_rate_lbs_per_week : 1;
-    var wantedDeficit = rate * KCAL_PER_LB / 7;
-
-    var floor = Math.max(
-      settings.min_kcal > 0 ? settings.min_kcal : DEFAULT_FLOOR_KCAL,
-      tdee * MIN_FRACTION_OF_TDEE
-    );
-
-    var idealTarget = tdee - wantedDeficit;
-    var capped = idealTarget < floor;
-    var newTarget = capped ? floor : idealTarget;
+    var t = targetFor(tdee, settings);
 
     // The other lever: keep eating what you eat now, burn the shortfall.
-    var current = settings.target_kcal > 0 ? settings.target_kcal : newTarget;
-    var activityKcal = Math.max(0, wantedDeficit - (tdee - current));
+    var current = settings.target_kcal > 0 ? settings.target_kcal : t.target;
+    var activityKcal = Math.max(0, t.deficit - (tdee - current));
 
     return {
       measuredTdee: tdee,
-      ratePerWeek: rate,
-      newTarget: Math.round(newTarget),
+      ratePerWeek: t.ratePerWeek,
+      newTarget: t.target,
       currentTarget: settings.target_kcal || null,
-      change: settings.target_kcal ? Math.round(newTarget - settings.target_kcal) : null,
-      floor: Math.round(floor),
-      cappedAtFloor: capped,
+      change: settings.target_kcal ? Math.round(t.target - settings.target_kcal) : null,
+      floor: t.floor,
+      cappedAtFloor: t.cappedAtFloor,
       activityKcalPerDay: Math.round(activityKcal),
-      note: capped
+      note: t.cappedAtFloor
         ? 'That is as low as this will go. Cutting further is not the answer here - ' +
           'a couple of weeks eating at maintenance does more than a smaller number would.'
         : ''
+    };
+  }
+
+  // ------------------------------------------------ the starting estimate
+
+  /* A formula cannot tell you your burn rate. It can only give you somewhere
+   * to stand for the first fortnight, until there is enough logged for
+   * measureTdee() to do the job properly. Everything below is scaffolding,
+   * and the app says so wherever it shows a number from it.
+   *
+   * Mifflin-St Jeor is the usual starting point and is typically within
+   * about 10% for most people - which is 200-odd calories, i.e. the whole
+   * difference between losing and not. Katch-McArdle is used instead when
+   * body fat is known, because lean mass is what actually burns; it needs no
+   * age and no sex term at all.
+   */
+  var ACTIVITY = {
+    sedentary: { factor: 1.2, label: 'Desk job, little exercise' },
+    light: { factor: 1.375, label: 'Light exercise 1-3 days a week' },
+    moderate: { factor: 1.55, label: 'Moderate exercise 3-5 days a week' },
+    high: { factor: 1.725, label: 'Hard exercise 6-7 days a week' },
+    athlete: { factor: 1.9, label: 'Physical job or twice-daily training' }
+  };
+
+  var LB_TO_KG = 0.45359237;
+  var IN_TO_CM = 2.54;
+
+  function estimateBmr(p) {
+    p = p || {};
+    var lbs = Number(p.weightLbs);
+    if (!(lbs > 0)) return { error: 'Needs your current weight.' };
+    var kg = lbs * LB_TO_KG;
+
+    var bf = Number(p.bodyFatPct);
+    if (bf > 0 && bf < 70) {
+      var lean = kg * (1 - bf / 100);
+      return { bmr: 370 + 21.6 * lean, formula: 'Katch-McArdle', usedBodyFat: true };
+    }
+
+    var inches = Number(p.heightIn);
+    var age = Number(p.age);
+    if (!(inches > 0)) return { error: 'Needs your height.' };
+    if (!(age > 0)) return { error: 'Needs your age.' };
+
+    var base = 10 * kg + 6.25 * (inches * IN_TO_CM) - 5 * age;
+    // The only difference between the two forms of this equation.
+    var constant = (String(p.sex).toLowerCase() === 'female') ? -161 : 5;
+    return { bmr: base + constant, formula: 'Mifflin-St Jeor', usedBodyFat: false };
+  }
+
+  function estimateTdee(p) {
+    var r = estimateBmr(p);
+    if (r.error) return r;
+    var key = ACTIVITY[p.activity] ? p.activity : 'sedentary';
+    var act = ACTIVITY[key];
+    return {
+      bmr: r.bmr,
+      formula: r.formula,
+      usedBodyFat: r.usedBodyFat,
+      activity: key,
+      activityLabel: act.label,
+      multiplier: act.factor,
+      tdee: r.bmr * act.factor,
+      estimated: true
+    };
+  }
+
+  // The whole starting suggestion: burn rate, target, and the caveat.
+  function suggestTarget(profile, settings) {
+    var est = estimateTdee(profile);
+    if (est.error) return est;
+    var t = targetFor(est.tdee, settings);
+    return {
+      bmr: Math.round(est.bmr),
+      tdee: Math.round(est.tdee),
+      formula: est.formula,
+      usedBodyFat: est.usedBodyFat,
+      activityLabel: est.activityLabel,
+      multiplier: est.multiplier,
+      target: t.target,
+      deficit: t.deficit,
+      ratePerWeek: t.ratePerWeek,
+      floor: t.floor,
+      cappedAtFloor: t.cappedAtFloor,
+      caveat: 'This is a formula, not a measurement. Expect it to be out by ' +
+        '10% either way - about ' + Math.round(est.tdee * 0.1) + ' kcal. ' +
+        'Two weeks of weighing in and logging replaces it with your real number.'
     };
   }
 
@@ -407,6 +511,12 @@ CalTrack.trend = (function () {
     measureTdee: measureTdee,
     assumedTdee: assumedTdee,
     plateau: plateau,
-    adjustment: adjustment
+    adjustment: adjustment,
+    floorFor: floorFor,
+    targetFor: targetFor,
+    ACTIVITY: ACTIVITY,
+    estimateBmr: estimateBmr,
+    estimateTdee: estimateTdee,
+    suggestTarget: suggestTarget
   };
 })();

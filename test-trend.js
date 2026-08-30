@@ -277,6 +277,101 @@ const settings = { target_kcal: 2000, target_rate_lbs_per_week: 1, tdee_override
 }
 eq('no TDEE means no advice', T.adjustment({ tdee: null, settings: {} }), null);
 
+// ------------------------------------------ the starting estimate
+// Mifflin-St Jeor, worked by hand: 180 lb, 5'10", 30 years old.
+//   kg = 180 x 0.45359237 = 81.6466
+//   cm = 70 x 2.54        = 177.8
+//   base = 10(81.6466) + 6.25(177.8) - 5(30) = 1777.716
+{
+  const male = T.estimateBmr({ weightLbs: 180, heightIn: 70, age: 30, sex: 'male' });
+  near('Mifflin-St Jeor, male constant +5', male.bmr, 1777.716 + 5, 0.01);
+  eq('names the formula', male.formula, 'Mifflin-St Jeor');
+
+  const female = T.estimateBmr({ weightLbs: 180, heightIn: 70, age: 30, sex: 'female' });
+  near('Mifflin-St Jeor, female constant -161', female.bmr, 1777.716 - 161, 0.01);
+  near('the two forms differ by exactly 166', male.bmr - female.bmr, 166, 0.01);
+
+  // Katch-McArdle needs neither age nor sex: 180 lb at 20% fat is 144 lb lean.
+  const bf = T.estimateBmr({ weightLbs: 180, bodyFatPct: 20 });
+  near('Katch-McArdle from lean mass', bf.bmr, 370 + 21.6 * (144 * 0.45359237), 0.01);
+  eq('names that formula too', bf.formula, 'Katch-McArdle');
+  eq('and says it used body fat', bf.usedBodyFat, true);
+
+  // Body fat wins when it is known, even with everything else supplied.
+  const both = T.estimateBmr({ weightLbs: 180, heightIn: 70, age: 30, sex: 'male', bodyFatPct: 20 });
+  eq('body fat takes precedence', both.formula, 'Katch-McArdle');
+
+  // Nonsense body fat falls back rather than producing a silly number.
+  const silly = T.estimateBmr({ weightLbs: 180, heightIn: 70, age: 30, sex: 'male', bodyFatPct: 95 });
+  eq('an impossible body fat is ignored', silly.formula, 'Mifflin-St Jeor');
+}
+
+// Missing inputs must say what is missing, not guess.
+ok('no weight is an error', !!T.estimateBmr({ heightIn: 70, age: 30 }).error);
+ok('no height is an error', !!T.estimateBmr({ weightLbs: 180, age: 30 }).error);
+ok('no age is an error', !!T.estimateBmr({ weightLbs: 180, heightIn: 70 }).error);
+ok('an empty profile is an error', !!T.estimateTdee({}).error);
+
+// Activity multipliers
+{
+  const sed = T.estimateTdee({ weightLbs: 180, heightIn: 70, age: 30, sex: 'male', activity: 'sedentary' });
+  near('sedentary is BMR x 1.2', sed.tdee, sed.bmr * 1.2, 0.01);
+  const hard = T.estimateTdee({ weightLbs: 180, heightIn: 70, age: 30, sex: 'male', activity: 'athlete' });
+  near('athlete is BMR x 1.9', hard.tdee, hard.bmr * 1.9, 0.01);
+  ok('more activity means a higher burn', hard.tdee > sed.tdee);
+  eq('an unknown activity falls back to sedentary',
+    T.estimateTdee({ weightLbs: 180, heightIn: 70, age: 30, activity: 'nonsense' }).activity, 'sedentary');
+}
+
+// The whole suggestion, and its floor.
+{
+  const s = T.suggestTarget(
+    { weightLbs: 180, heightIn: 70, age: 30, sex: 'male', activity: 'sedentary' },
+    { target_rate_lbs_per_week: 1 });
+  eq('target is the estimate minus 500 a day', s.target, Math.round(s.tdee - 500));
+  eq('deficit stated', s.deficit, 500);
+  eq('not capped for this profile', s.cappedAtFloor, false);
+  ok('and it admits it is a formula', /formula, not a measurement/.test(s.caveat));
+
+  // A small person chasing 2 lb a week has to hit the floor.
+  const tight = T.suggestTarget(
+    { weightLbs: 120, heightIn: 62, age: 55, sex: 'female', activity: 'sedentary' },
+    { target_rate_lbs_per_week: 2 });
+  eq('the floor bites', tight.cappedAtFloor, true);
+  ok('and the target respects it', tight.target >= tight.floor);
+  ok('never below the absolute floor', tight.target >= 1500 * 0.999);
+}
+
+// The reference chain: an estimate is better than nothing, and worse than
+// a measurement. It must sit in exactly that order.
+{
+  const run = makeRun({ days: 28, intake: 2000, startWeight: 220, lbsPerDay: 1 / 7 });
+  const m = T.measureTdee({ entries: run.entries, weighIns: run.weighIns, asOf: run.asOf });
+  ok('the measurement is trustworthy here', m.confidence !== 'none');
+
+  eq('an accepted burn rate beats everything',
+    T.assumedTdee({ tdee_override: 2600, estimated_tdee: 2100, target_kcal: 1800,
+                    target_rate_lbs_per_week: 1 }, m), 2600);
+  eq('a good measurement beats the formula',
+    T.assumedTdee({ estimated_tdee: 2100 }, m), m.tdee);
+  eq('the formula is used when the measurement is not ready',
+    T.assumedTdee({ estimated_tdee: 2100 }, { tdee: 9999, confidence: 'none' }), 2100);
+  eq('and the target implies one when there is no formula either',
+    T.assumedTdee({ target_kcal: 1800, target_rate_lbs_per_week: 1 },
+                  { tdee: 9999, confidence: 'none' }), 1800 + 500);
+  eq('nothing at all means nothing',
+    T.assumedTdee({}, { tdee: 9999, confidence: 'none' }), null);
+}
+
+// The estimate and the measurement must agree on how a target is derived.
+{
+  const settings = { target_rate_lbs_per_week: 1 };
+  const viaAdjustment = T.adjustment({ tdee: 2400, settings: settings });
+  const viaTarget = T.targetFor(2400, settings);
+  eq('one shared rule for the target', viaAdjustment.newTarget, viaTarget.target);
+  eq('and one shared floor', viaAdjustment.floor, viaTarget.floor);
+}
+
 // ------------------------------------------------------------ plumbing
 
 {
