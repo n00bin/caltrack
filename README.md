@@ -337,65 +337,6 @@ pulls ZXing from jsDelivr — pinned to one version and locked to a
 ever change. Nothing is fetched until someone actually opens the scanner on
 one of those browsers.
 
-## Reading the scale over Bluetooth
-
-**Trend -> Read from my scale.** Chrome on Android only, and it works if and
-only if your scale implements the Bluetooth SIG standard services: Weight
-Scale (`0x181D`) and Body Composition (`0x181B`). A scale that does will hand
-over weight, body fat and muscle mass to any client. Plenty of budget scales
-do not — they broadcast a proprietary blob that only the vendor app decodes,
-and expose nothing readable. There is no way to tell from outside which sort
-you own except to try, so the app tries and says plainly what it found.
-
-The measurement characteristics *indicate* rather than read, so connecting is
-not enough: stand on the scale while connected and the reading arrives when it
-finishes measuring. It fills the weigh-in boxes rather than saving, so you
-still check the numbers before they become a record.
-
-`bluetooth.js` keeps the packet parsing separate from the connecting, because
-the parsing is the half that can be tested without a scale — `test-bluetooth.js`
-builds packets byte by byte from the spec. That matters most for the body
-composition packet, where every field after body fat is optional and they
-appear in a fixed order: read the order wrong and muscle mass silently comes
-back as body water. Writing those tests also turned up a crash on a truncated
-packet, which a real scale can send.
-
-**The ICOMON / Lefu `ffb0` protocol is implemented**, decoded from a real
-A-Scale X (ICOMON FI2019LB-B, firmware 1.0.4). Twenty-byte big-endian frames:
-`ffb2` notifies the live reading while you settle, `ffb3` indicates the final
-one. Weight is a **24-bit** value, at bytes 6-8 in live frames and 5-7 in
-final ones - the live frame carries an extra state byte that shifts
-everything along. That state byte runs `01` settling, `02` stable, `04`
-measuring composition.
-
-The final frame carries an **impedance** reading, but only when both bare
-feet are properly on the electrodes; a one-footed reading has zeros there and
-gets no body composition at all. Every one of those frames is in
-`test-bluetooth.js` as captured bytes, so the parser cannot drift.
-
-What the impedance can*not* do is become a body fat percentage. That number
-comes from the vendor's own proprietary formula, which is not in the protocol
-and which no amount of parsing recovers. The app reports the ohms and tells
-you to read the percentages off the scale's display.
-
-Nothing in the frame says whether the scale is set to pounds or kilograms, so
-the divisor is **calibrated, not assumed**: take one reading, type what the
-display said, and it works out the conversion and stores it.
-
-**"What does my scale offer?"** connects to any device you pick and prints
-every service and characteristic it exposes, with their properties. That
-turns "it did nothing" into a list of UUIDs, which is the difference between
-diagnosing and guessing. Scales that are pure broadcasters come back with no
-readable services at all — that is the definitive answer, not a failure.
-
-Every one of these buttons is wrapped so that a thrown exception becomes a
-message on screen. They were not, and a synchronous throw out of
-`requestDevice` escaped the click handler and vanished, which is exactly what
-"both buttons did nothing" meant.
-
-The connecting half is **not** verifiable here — no scale, no Bluetooth, no
-phone.
-
 ## Checking your own library
 
 **Settings -> Check my foods** goes through everything saved and reports what

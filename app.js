@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1408+9d40427';
+  var BUILD = '2026-08-31.1414+2dd2d6d';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -32,7 +32,6 @@
     refPer100: null,         // nutrition already known, from a scan or a save
     svTouched: false,        // has the user overridden the derived figures?
     svFromData: false,       // the serving weight came from a lookup, not a guess
-    lastScaleRaw: null,      // raw units from the last Bluetooth reading
     foodBasis: 'weight',     // 'volume' for drinks, so screens say ml not g
     dayTotal: 0,             // kcal already logged on the day being shown
     editingMealId: null,
@@ -1314,7 +1313,6 @@
 
   function renderTrend() {
     if (!$('weightDate').value) $('weightDate').value = localDate(new Date());
-    $('bleBox').hidden = !(CalTrack.ble && CalTrack.ble.supported());
 
     Promise.all([store.weighIns.all(), store.log.all()]).then(function (res) {
       var weighIns = res[0];
@@ -2016,126 +2014,7 @@
 
   // ------------------------------------------------------------ settings
 
-  // ---------------------------------------------------- reading the scale
 
-  /* Fills the weigh-in boxes from the scale rather than saving straight
-   * away: the numbers are still checked by eye before they become a record,
-   * and the Save button stays the thing that commits.
-   */
-  function connectScale(allDevices) {
-    var msg = $('bleMsg');
-    clearMsg(msg);
-    $('bleReport').hidden = true;
-
-    if (!CalTrack.ble.supported()) {
-      showError(msg, CalTrack.ble.whyUnsupported() ||
-        'This browser cannot talk to Bluetooth devices.');
-      return;
-    }
-
-    CalTrack.ble.connect({
-      allDevices: !!allDevices,
-      divisor: state.settings.scale_divisor,
-      onStatus: function (text) { clearMsg(msg); msg.textContent = text; },
-      onReading: function (r) {
-        if (r.weight_lbs) $('weightInput').value = round(r.weight_lbs, 1);
-        if (r.body_fat_pct) $('bodyFatInput').value = round(r.body_fat_pct, 1);
-        if (r.muscle_mass_lbs) $('muscleInput').value = round(r.muscle_mass_lbs, 1);
-
-        state.lastScaleRaw = r.raw || null;
-
-        var note = 'Read ' + round(r.weight_lbs, 1) + ' lb. Check it against the ' +
-          'display, then Save weight.';
-        if (r.footContact === false) {
-          note += ' No body-composition reading came with it - that needs both ' +
-            'bare feet flat on the metal.';
-        } else if (r.impedance) {
-          note += ' It measured ' + r.impedance + ' ohms, which is the body ' +
-            'composition reading, but only the scale knows the formula that ' +
-            'turns it into percentages - read those off its display.';
-        }
-        clearMsg(msg);
-        msg.textContent = note;
-        $('bleCalibrate').hidden = !r.raw;
-        if (navigator.vibrate) navigator.vibrate(60);
-      },
-      onError: function (err) { showError(msg, err.message); }
-    });
-  }
-
-  /* The scale sends raw counts, and nothing in the frame says whether it is
-   * set to pounds or kilograms. Rather than guess, take the number off the
-   * display once and work the divisor out from it. It is stored, so this
-   * only ever happens once.
-   */
-  function calibrateScale() {
-    var msg = $('bleMsg');
-    clearMsg(msg);
-    var shown = parseFloat($('bleShown').value);
-
-    if (!state.lastScaleRaw) {
-      showError(msg, 'Take a reading from the scale first.');
-      return;
-    }
-    if (!isFinite(shown) || shown <= 0) {
-      showError(msg, 'Type the weight your scale displayed, in pounds.');
-      return;
-    }
-
-    var divisor = state.lastScaleRaw / shown;
-    store.saveSettings({ scale_divisor: divisor }).then(function (s) {
-      state.settings = s;
-      $('weightInput').value = round(shown, 1);
-      $('bleCalibrate').hidden = true;
-      $('bleShown').value = '';
-      msg.textContent = 'Set. Readings from this scale will match its display ' +
-        'from now on.';
-      toast('Scale calibrated');
-    });
-  }
-
-  /* "It did nothing" is not a diagnosis. This asks the scale what it has and
-   * prints it, so the answer is a list of UUIDs rather than a guess.
-   */
-  function probeScale() {
-    var msg = $('bleMsg');
-    var report = $('bleReport');
-    clearMsg(msg);
-    report.hidden = true;
-
-    if (!CalTrack.ble.supported()) {
-      showError(msg, CalTrack.ble.whyUnsupported() ||
-        'This browser cannot talk to Bluetooth devices.');
-      return;
-    }
-
-    CalTrack.ble.probe({
-      onStatus: function (text) { clearMsg(msg); msg.textContent = text; },
-      onReport: function (text) {
-        clearMsg(msg);
-        msg.textContent = 'Here is everything it offers. Send this on.';
-        report.textContent = text;
-        report.hidden = false;
-      },
-      onError: function (err) { showError(msg, err.message); }
-    });
-  }
-
-  /* Any throw inside a click handler is invisible to the user - the button
-   * simply does nothing, which is exactly what happened with the scale
-   * buttons. Wrapping them means a mistake becomes a message.
-   */
-  function guarded(fn, msgId) {
-    return function () {
-      try {
-        fn();
-      } catch (e) {
-        var el = $(msgId);
-        if (el) showError(el, 'That failed: ' + (e && e.message ? e.message : e));
-        console.error('[app]', e);
-      }
-    };
-  }
 
   // ------------------------------------------------------ auditing foods
 
@@ -2613,12 +2492,6 @@
     $('mealLogConfirm').addEventListener('click', confirmMealLog);
 
     $('saveWeight').addEventListener('click', saveWeighIn);
-    $('bleConnect').addEventListener('click',
-      guarded(function () { connectScale(false); }, 'bleMsg'));
-    $('bleAll').addEventListener('click',
-      guarded(function () { connectScale(true); }, 'bleMsg'));
-    $('bleProbe').addEventListener('click', guarded(probeScale, 'bleMsg'));
-    $('bleCalSave').addEventListener('click', guarded(calibrateScale, 'bleMsg'));
     $('weightInput').addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter') { ev.preventDefault(); saveWeighIn(); }
     });

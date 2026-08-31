@@ -91,24 +91,6 @@
                  placeholder="from your scale"></label>
       </div>
       <button id="saveWeight" class="btn primary wide">Save weight</button>
-      <div id="bleBox">
-        <button id="bleConnect" class="btn wide">Read from my scale</button>
-        <button id="bleAll" class="btn wide">Show every device</button>
-        <button id="bleProbe" class="btn wide">What does my scale offer?</button>
-      </div>
-      <p id="bleMsg" class="msg"></p>
-      <div id="bleCalibrate" hidden>
-        <label class="field"><span>Scale showed something different? Type what
-          it displayed, in pounds</span>
-          <input type="number" id="bleShown" inputmode="decimal" step="0.1"
-                 placeholder="e.g. 215.3"></label>
-        <button id="bleCalSave" class="btn">Use that instead</button>
-      </div>
-      <pre id="bleReport" class="report" hidden></pre>
-      <p class="hint">Need the raw bytes for someone to decode?
-        <a href="scale-probe.html">Open the standalone scale probe</a> - it
-        records everything the scale sends while you stand on it, with a copy
-        button.</p>
       <p id="weightMsg" class="msg"></p>
     </div>
 
@@ -467,7 +449,6 @@
 <script src="scan.js"></script>
 <script src="usda.js"></script>
 <script src="audit.js"></script>
-<script src="bluetooth.js"></script>
 <script src="trend.js"></script>
 <script src="app.js"></script>
 </body>

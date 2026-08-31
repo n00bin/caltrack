@@ -16,7 +16,7 @@
  * honestly rather than quietly serving yesterday's answer.
  */
 
-const VERSION = 'caltrack-2026-08-31.1408+9d40427';
+const VERSION = 'caltrack-2026-08-31.1414+2dd2d6d';
 const TIMEOUT_MS = 3000;
 
 const SHELL = [
@@ -27,8 +27,6 @@ const SHELL = [
   './scan.js',
   './usda.js',
   './audit.js',
-  './bluetooth.js',
-  './scale-probe.html',
   './trend.js',
   './app.js',
   './manifest.json',
