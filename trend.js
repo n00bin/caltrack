@@ -504,12 +504,50 @@ CalTrack.trend = (function () {
    * light for someone thin with little muscle. Reported with its category
    * and that caveat attached, because a bare number invites the wrong reading.
    */
+  /* The bands, with the colour each gets on the bar.
+   *
+   * Not a green-to-red gradient: a BMI below 18.5 carries its own risks, so
+   * the low band is amber rather than the "best" end of a scale. Green is
+   * the middle, which is what the thresholds actually say.
+   */
   var BMI_BANDS = [
-    { upto: 18.5, name: 'under the healthy range' },
-    { upto: 25, name: 'the healthy range' },
-    { upto: 30, name: 'the overweight range' },
-    { upto: Infinity, name: 'the obese range' }
+    { upto: 18.5, name: 'under the healthy range', tone: 'low' },
+    { upto: 25, name: 'the healthy range', tone: 'good' },
+    { upto: 30, name: 'the overweight range', tone: 'warn' },
+    { upto: Infinity, name: 'the obese range', tone: 'high' }
   ];
+
+  // The bar covers 15 to 40. Below and above that the exact number stops
+  // telling you anything the category has not already said.
+  var BMI_MIN = 15;
+  var BMI_MAX = 40;
+
+  // Where a BMI sits along the bar, 0 to 100.
+  function bmiPercent(value) {
+    var p = ((value - BMI_MIN) / (BMI_MAX - BMI_MIN)) * 100;
+    return Math.max(0, Math.min(100, p));
+  }
+
+  /* The bar as drawable segments: each band's share of the width, so the
+   * markup does not have to know the thresholds.
+   */
+  function bmiSegments() {
+    var out = [];
+    var from = BMI_MIN;
+    BMI_BANDS.forEach(function (band) {
+      var to = Math.min(band.upto, BMI_MAX);
+      if (to <= from) return;
+      out.push({
+        tone: band.tone,
+        name: band.name,
+        from: from,
+        to: to,
+        widthPct: ((to - from) / (BMI_MAX - BMI_MIN)) * 100
+      });
+      from = to;
+    });
+    return out;
+  }
 
   function bmi(weightLbs, heightIn) {
     if (!(weightLbs > 0) || !(heightIn > 0)) return null;
@@ -739,6 +777,10 @@ CalTrack.trend = (function () {
     adjustment: adjustment,
     projectGoal: projectGoal,
     bmi: bmi,
+    BMI_MIN: BMI_MIN,
+    BMI_MAX: BMI_MAX,
+    bmiPercent: bmiPercent,
+    bmiSegments: bmiSegments,
     composition: composition,
     readTissueRate: readTissueRate,
     floorFor: floorFor,

@@ -54,8 +54,10 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
 - **What you actually burn** — your TDEE, backed out of what really happened
   rather than predicted from a formula, with an honest label on it: *not yet
   reliable*, *early estimate*, or *measured*.
-- **BMI and body composition** — BMI from your height and smoothed weight,
-  with its category and the caveat that it cannot tell muscle from fat. A
+- **BMI and body composition** — BMI from your height and smoothed weight, on
+  a banded bar with your current figure marked and, if you have set one, your
+  goal weight marked beside it. The bands are population thresholds; the goal
+  mark is the part that is about you. A
   weigh-in also takes **body fat %** and **muscle mass** if your scale reports
   them, and the app tracks which of fat and muscle is actually moving.
 - **Getting to your goal** — a date, worked out from the trend you are

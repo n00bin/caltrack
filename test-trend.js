@@ -386,6 +386,45 @@ eq('exactly 25 is overweight, not healthy',
   T.bmi(25 * 4900 / 703, 70).category, 'the overweight range');
 eq('a hair under 25 is still healthy', T.bmi(174.2, 70).category, 'the healthy range');
 
+// --- the BMI bar --------------------------------------------------------
+{
+  const segs = T.bmiSegments();
+  eq('four bands', segs.length, 4);
+  eq('they start at the bottom of the bar', segs[0].from, T.BMI_MIN);
+  eq('and finish at the top', segs[segs.length - 1].to, T.BMI_MAX);
+  near('the widths add up to the whole bar',
+    segs.reduce((a, s) => a + s.widthPct, 0), 100, 1e-9);
+
+  // Each band has to end where the next begins, or the bar lies.
+  for (let i = 1; i < segs.length; i++) {
+    eq('band ' + i + ' begins where band ' + (i - 1) + ' ended',
+      segs[i].from, segs[i - 1].to);
+  }
+
+  // A low BMI is not the "good" end - it carries its own risk.
+  eq('under 18.5 is not green', segs[0].tone, 'low');
+  eq('the healthy band is', segs[1].tone, 'good');
+  eq('overweight', segs[2].tone, 'warn');
+  eq('obese', segs[3].tone, 'high');
+}
+
+near('the bottom of the scale is the left edge', T.bmiPercent(15), 0);
+near('the top is the right edge', T.bmiPercent(40), 100);
+near('the healthy threshold sits where its band starts', T.bmiPercent(18.5), 14);
+near('and 25 where the next begins', T.bmiPercent(25), 40);
+// Off-scale values clamp rather than running off the end of the bar.
+near('a very low BMI clamps to the left', T.bmiPercent(9), 0);
+near('a very high one clamps to the right', T.bmiPercent(70), 100);
+
+// The marker and the band must agree about which colour someone is in.
+{
+  const at = (v) => T.bmiSegments().filter(s => v >= s.from && v < s.to)[0];
+  eq('a BMI of 22 lands in the healthy band', at(22).tone, 'good');
+  eq('and 27 in the overweight one', at(27).tone, 'warn');
+  eq('which matches what bmi() calls it', T.bmi(703 * 27 * 4900 / 703 / 4900, 70) &&
+    T.bmi(188.1, 70).category, 'the overweight range');
+}
+
 // ------------------------------------------- lean and fat mass
 {
   // 200 lb at 25% fat -> 50 lb fat, 150 lb lean.

@@ -385,6 +385,50 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 .chartsvg .raw { fill: var(--muted); opacity: .45; }
 .chartsvg .trendline { fill: none; stroke: var(--accent); stroke-width: 2.5; }
 
+/* ---------- BMI bar ---------- */
+
+.bmibar-wrap { margin: 14px 0 8px; }
+
+.bmibar {
+  position: relative;
+  display: flex;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.bmibar span { display: block; height: 100%; }
+.bmibar .tone-low  { background: #c8922b; }
+.bmibar .tone-good { background: var(--accent); }
+.bmibar .tone-warn { background: #c96a24; }
+.bmibar .tone-high { background: var(--danger); }
+
+/* The markers sit under the bar so they never cover the colours. */
+.bmimarks { position: relative; height: 30px; margin-top: 2px; }
+.bmimark {
+  position: absolute;
+  transform: translateX(-50%);
+  text-align: center;
+  font-size: .68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.bmimark b { display: block; font-size: .78rem; color: var(--text); }
+.bmimark::before {
+  content: '▲';
+  display: block;
+  font-size: .6rem;
+  line-height: 1;
+  color: var(--text);
+}
+.bmimark.goal::before { color: var(--muted); }
+.bmimark.goal b { color: var(--muted); font-weight: 600; }
+
+.bmiscale {
+  display: flex; justify-content: space-between;
+  font-size: .65rem; color: var(--muted); margin-top: 2px;
+}
+
 .bignum { font-size: 1.1rem; }
 .bignum b { font-size: 2.1rem; }
 

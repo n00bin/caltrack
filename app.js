@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1414+2dd2d6d';
+  var BUILD = '2026-08-31.1419+4e5c027';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1408,8 +1408,20 @@
       box.appendChild(line);
       box.appendChild(hintP('At ' + round(current, 1) + ' lb and ' +
         Math.floor(height / 12) + "'" + Math.round(height % 12) + '", that is ' +
-        b.category + '. BMI cannot tell muscle from fat, so it reads heavy for ' +
-        'anyone who lifts - it is a rough screening number, not a verdict.'));
+        b.category + '.'));
+
+      // Where the goal weight would land, so the bar is about you rather
+      // than about the population the thresholds came from.
+      var goal = state.settings.goal_weight_lbs;
+      var goalBmi = (goal > 0) ? T.bmi(goal, height) : null;
+      box.appendChild(bmiBar(b.bmi, goalBmi ? goalBmi.bmi : null));
+
+      box.appendChild(hintP('Those bands are population screening thresholds, ' +
+        'not a target set for you - BMI cannot tell muscle from fat, so it reads ' +
+        'heavy for anyone who lifts.' +
+        (goalBmi ? ' The lower mark is where your goal weight of ' +
+          round(goal, 1) + ' lb would put you.'
+                 : ' Set a goal weight and it will be marked on here too.')));
     } else if (current) {
       box.appendChild(hintP('Put your height into Settings and BMI appears here.'));
     }
@@ -1458,6 +1470,57 @@
       'high by construction. Hydration moves it by several points, so weigh in the ' +
       'same conditions each time: same hour, before eating or drinking, after the ' +
       'loo. Only the trend across many readings means anything.'));
+  }
+
+  /* The BMI bar: coloured bands, a marker for now, and a second marker for
+   * the goal weight. Built from trend.js's segments so the thresholds live
+   * in one place.
+   */
+  function bmiBar(current, goal) {
+    var T = CalTrack.trend;
+    var wrap = document.createElement('div');
+    wrap.className = 'bmibar-wrap';
+
+    var bar = document.createElement('div');
+    bar.className = 'bmibar';
+    T.bmiSegments().forEach(function (seg) {
+      var piece = document.createElement('span');
+      piece.className = 'tone-' + seg.tone;
+      piece.style.width = seg.widthPct + '%';
+      piece.title = seg.name + ' (' + seg.from + ' to ' + seg.to + ')';
+      bar.appendChild(piece);
+    });
+    wrap.appendChild(bar);
+
+    var marks = document.createElement('div');
+    marks.className = 'bmimarks';
+
+    var you = document.createElement('div');
+    you.className = 'bmimark';
+    you.style.left = T.bmiPercent(current) + '%';
+    you.innerHTML = '<b>' + round(current, 1) + '</b>you';
+    marks.appendChild(you);
+
+    if (goal) {
+      var g = document.createElement('div');
+      g.className = 'bmimark goal';
+      g.style.left = T.bmiPercent(goal) + '%';
+      g.innerHTML = '<b>' + round(goal, 1) + '</b>goal';
+      // Two marks on the same spot would overlap illegibly.
+      if (Math.abs(T.bmiPercent(goal) - T.bmiPercent(current)) < 6) {
+        g.style.top = '15px';
+      }
+      marks.appendChild(g);
+    }
+    wrap.appendChild(marks);
+
+    var scale = document.createElement('div');
+    scale.className = 'bmiscale';
+    scale.innerHTML = '<span>' + T.BMI_MIN + '</span><span>18.5</span>' +
+      '<span>25</span><span>30</span><span>' + T.BMI_MAX + '</span>';
+    wrap.appendChild(scale);
+
+    return wrap;
   }
 
   function signed(n) {
