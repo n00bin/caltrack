@@ -31,6 +31,26 @@ CalTrack.ble = (function () {
   var LB_RESOLUTION = 0.01;     // Imperial mass
   var PCT_RESOLUTION = 0.1;
 
+  /* Services worth asking permission for.
+   *
+   * Web Bluetooth will only let a page see services it named up front, so a
+   * probe has to guess. These are the standard pair plus the custom UUIDs
+   * that turn up on cheap body-composition scales - FFB0 is the Lefu/FitDays
+   * one, and the rest are the usual Chinese BLE module defaults.
+   */
+  var KNOWN_SERVICES = [
+    0x181D, 0x181B,             // Weight Scale, Body Composition
+    0xFFB0,                     // Lefu / FitDays
+    0xFFF0, 0xFFE0, 0xFEE7,     // common module defaults
+    0x1910,                     // Xiaomi
+    0xFE95,                     // Xiaomi/MiBeacon
+    0x180A, 0x180F              // device info, battery
+  ];
+
+  function hex(uuid) {
+    return String(uuid);
+  }
+
   function supported() {
     return !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
   }
@@ -190,8 +210,6 @@ CalTrack.ble = (function () {
                     { services: [BODY_COMPOSITION_SERVICE] }],
           optionalServices: [WEIGHT_SCALE_SERVICE, BODY_COMPOSITION_SERVICE] };
 
-    opts.onStatus('Pick your scale from the list...');
-
     var latestWeight = null;
     var latestComposition = null;
 
@@ -202,7 +220,18 @@ CalTrack.ble = (function () {
       }
     }
 
-    return navigator.bluetooth.requestDevice(request).then(function (d) {
+    var started;
+    try {
+      opts.onStatus('Pick your scale from the list...');
+      started = navigator.bluetooth.requestDevice(request);
+    } catch (e) {
+      // A synchronous throw here used to escape the click handler entirely,
+      // so the button appeared to do nothing at all.
+      opts.onError(describe(e));
+      return Promise.resolve();
+    }
+
+    return started.then(function (d) {
       device = d;
       opts.onStatus('Connecting...');
       d.addEventListener('gattserverdisconnected', function () {
@@ -232,13 +261,13 @@ CalTrack.ble = (function () {
       opts.onStatus('Ready. Step on the scale now and stay still - the reading ' +
         'arrives when it finishes measuring.');
     }).catch(function (e) {
-      if (e && e.name === 'NotFoundError') {
-        opts.onError(new Error('No scale picked, or none nearby offering the ' +
-          'standard services. Try "show every device" if you can see it in your ' +
-          'phone settings but not here.'));
+      if (e && e.name === 'NotFoundError' && !opts.allDevices) {
+        opts.onError(new Error('Nothing nearby is offering the standard weight ' +
+          'services. Try "show every device", and if that does not find it ' +
+          'either, use "what does my scale offer?".'));
         return;
       }
-      opts.onError(e instanceof Error ? e : new Error('Could not connect.'));
+      opts.onError(describe(e));
     });
   }
 
@@ -256,7 +285,103 @@ CalTrack.ble = (function () {
       .catch(function () { return false; });   // this scale has not got it
   }
 
+  /* Connect to ANY device and list what it actually offers.
+   *
+   * This exists because "it did nothing" is not a diagnosis. A scale that is
+   * a pure broadcaster - which many cheap ones are - exposes no services at
+   * all, and that is worth knowing definitively rather than inferring. The
+   * output is meant to be read out or screenshotted.
+   */
+  function probe(opts) {
+    var err = whyUnsupported();
+    if (err) { opts.onError(new Error(err)); return Promise.resolve(); }
+
+    var lines = [];
+    var picked = null;
+
+    try {
+      opts.onStatus('Pick your scale from the list...');
+      return navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: KNOWN_SERVICES
+      }).then(function (d) {
+        picked = d;
+        device = d;
+        lines.push('Device: ' + (d.name || '(no name)'));
+        opts.onStatus('Connecting to ' + (d.name || 'it') + '...');
+        return d.gatt.connect();
+      }).then(function (server) {
+        opts.onStatus('Connected. Asking what it offers...');
+        return server.getPrimaryServices();
+      }).then(function (services) {
+        if (!services.length) {
+          lines.push('No readable services at all.');
+          return null;
+        }
+        lines.push(services.length + ' service(s):');
+        return services.reduce(function (chain, svc) {
+          return chain.then(function () {
+            lines.push('  service ' + hex(svc.uuid));
+            return svc.getCharacteristics().then(function (chars) {
+              chars.forEach(function (c) {
+                var p = c.properties || {};
+                var flags = [];
+                if (p.read) flags.push('read');
+                if (p.write) flags.push('write');
+                if (p.writeWithoutResponse) flags.push('write-no-response');
+                if (p.notify) flags.push('notify');
+                if (p.indicate) flags.push('indicate');
+                lines.push('    char ' + hex(c.uuid) + '  [' + flags.join(', ') + ']');
+              });
+            }).catch(function () {
+              lines.push('    (characteristics not readable)');
+            });
+          });
+        }, Promise.resolve());
+      }).then(function () {
+        if (picked && picked.gatt && picked.gatt.connected) picked.gatt.disconnect();
+        opts.onReport(lines.join('\n'));
+      }).catch(function (e) {
+        if (picked && picked.gatt && picked.gatt.connected) picked.gatt.disconnect();
+        if (lines.length) {
+          lines.push('Then it failed: ' + (e && e.message ? e.message : e));
+          opts.onReport(lines.join('\n'));
+          return;
+        }
+        opts.onError(describe(e));
+      });
+    } catch (e) {
+      // requestDevice can throw synchronously, which otherwise vanishes.
+      opts.onError(describe(e));
+      return Promise.resolve();
+    }
+  }
+
+  // Turns a Web Bluetooth exception into something worth reading.
+  function describe(e) {
+    var name = e && e.name;
+    if (name === 'NotFoundError') {
+      return new Error('No device was picked, or none were offered. If your scale ' +
+        'is not in the list, it is not advertising anything a web page may see.');
+    }
+    if (name === 'SecurityError') {
+      return new Error('The browser blocked the request. Bluetooth needs an ' +
+        'https:// page and a real tap on the button.');
+    }
+    if (name === 'NotSupportedError') {
+      return new Error('This browser says it does not support that.');
+    }
+    if (name === 'NetworkError') {
+      return new Error('Could not connect. The scale may have gone to sleep - ' +
+        'step on it to wake it, then try again straight away.');
+    }
+    return e instanceof Error ? e : new Error(String(e));
+  }
+
   return {
+    KNOWN_SERVICES: KNOWN_SERVICES,
+    probe: probe,
+    describe: describe,
     supported: supported,
     whyUnsupported: whyUnsupported,
     connect: connect,

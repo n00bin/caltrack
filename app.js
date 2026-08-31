@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1328+ae8ede9';
+  var BUILD = '2026-08-31.1343+4c61547';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1313,7 +1313,7 @@
 
   function renderTrend() {
     if (!$('weightDate').value) $('weightDate').value = localDate(new Date());
-    $('bleBox').hidden = !CalTrack.ble.supported();
+    $('bleBox').hidden = !(CalTrack.ble && CalTrack.ble.supported());
 
     Promise.all([store.weighIns.all(), store.log.all()]).then(function (res) {
       var weighIns = res[0];
@@ -2024,6 +2024,7 @@
   function connectScale(allDevices) {
     var msg = $('bleMsg');
     clearMsg(msg);
+    $('bleReport').hidden = true;
 
     if (!CalTrack.ble.supported()) {
       showError(msg, CalTrack.ble.whyUnsupported() ||
@@ -2047,11 +2048,51 @@
         msg.textContent = 'Read ' + got.join(', ') + '. Check it, then Save weight.';
         if (navigator.vibrate) navigator.vibrate(60);
       },
-      onError: function (err) {
-        showError(msg, err.message);
-        $('bleAll').hidden = false;   // offer the wider search once
-      }
+      onError: function (err) { showError(msg, err.message); }
     });
+  }
+
+  /* "It did nothing" is not a diagnosis. This asks the scale what it has and
+   * prints it, so the answer is a list of UUIDs rather than a guess.
+   */
+  function probeScale() {
+    var msg = $('bleMsg');
+    var report = $('bleReport');
+    clearMsg(msg);
+    report.hidden = true;
+
+    if (!CalTrack.ble.supported()) {
+      showError(msg, CalTrack.ble.whyUnsupported() ||
+        'This browser cannot talk to Bluetooth devices.');
+      return;
+    }
+
+    CalTrack.ble.probe({
+      onStatus: function (text) { clearMsg(msg); msg.textContent = text; },
+      onReport: function (text) {
+        clearMsg(msg);
+        msg.textContent = 'Here is everything it offers. Send this on.';
+        report.textContent = text;
+        report.hidden = false;
+      },
+      onError: function (err) { showError(msg, err.message); }
+    });
+  }
+
+  /* Any throw inside a click handler is invisible to the user - the button
+   * simply does nothing, which is exactly what happened with the scale
+   * buttons. Wrapping them means a mistake becomes a message.
+   */
+  function guarded(fn, msgId) {
+    return function () {
+      try {
+        fn();
+      } catch (e) {
+        var el = $(msgId);
+        if (el) showError(el, 'That failed: ' + (e && e.message ? e.message : e));
+        console.error('[app]', e);
+      }
+    };
   }
 
   // ------------------------------------------------------ auditing foods
@@ -2530,8 +2571,11 @@
     $('mealLogConfirm').addEventListener('click', confirmMealLog);
 
     $('saveWeight').addEventListener('click', saveWeighIn);
-    $('bleConnect').addEventListener('click', function () { connectScale(false); });
-    $('bleAll').addEventListener('click', function () { connectScale(true); });
+    $('bleConnect').addEventListener('click',
+      guarded(function () { connectScale(false); }, 'bleMsg'));
+    $('bleAll').addEventListener('click',
+      guarded(function () { connectScale(true); }, 'bleMsg'));
+    $('bleProbe').addEventListener('click', guarded(probeScale, 'bleMsg'));
     $('weightInput').addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter') { ev.preventDefault(); saveWeighIn(); }
     });

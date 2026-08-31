@@ -360,8 +360,19 @@ appear in a fixed order: read the order wrong and muscle mass silently comes
 back as body water. Writing those tests also turned up a crash on a truncated
 packet, which a real scale can send.
 
+**"What does my scale offer?"** connects to any device you pick and prints
+every service and characteristic it exposes, with their properties. That
+turns "it did nothing" into a list of UUIDs, which is the difference between
+diagnosing and guessing. Scales that are pure broadcasters come back with no
+readable services at all — that is the definitive answer, not a failure.
+
+Every one of these buttons is wrapped so that a thrown exception becomes a
+message on screen. They were not, and a synchronous throw out of
+`requestDevice` escaped the click handler and vanished, which is exactly what
+"both buttons did nothing" meant.
+
 The connecting half is **not** verifiable here — no scale, no Bluetooth, no
-phone. If it does nothing, that is the untested half.
+phone.
 
 ## Checking your own library
 

@@ -152,6 +152,25 @@ eq('a runt composition packet', ble.parseBodyComposition(packet([[2, 0]])), null
 }
 eq('nothing in, nothing out', JSON.stringify(ble.toReading(null, null)), '{}');
 
+// --- errors have to be readable, not swallowed --------------------------
+ok('a missing device is explained',
+  /not advertising anything/.test(ble.describe({ name: 'NotFoundError' }).message));
+ok('a blocked request names the cause',
+  /https:\/\/ page and a real tap/.test(ble.describe({ name: 'SecurityError' }).message));
+ok('a dropped connection suggests waking the scale',
+  /step on it to wake it/.test(ble.describe({ name: 'NetworkError' }).message));
+ok('an unknown error still comes back as an Error',
+  ble.describe(new Error('boom')) instanceof Error);
+eq('and keeps its message', ble.describe(new Error('boom')).message, 'boom');
+ok('even a bare string', ble.describe('odd') instanceof Error);
+
+// The probe has to ask permission for the custom UUIDs, or Chrome hides them.
+ok('the probe asks for the standard weight service',
+  ble.KNOWN_SERVICES.indexOf(0x181D) !== -1);
+ok('and body composition', ble.KNOWN_SERVICES.indexOf(0x181B) !== -1);
+ok('and FFB0, which is the Lefu/FitDays one',
+  ble.KNOWN_SERVICES.indexOf(0xFFB0) !== -1);
+
 // --- capability reporting ------------------------------------------------
 ok('no Bluetooth in this browser is reported, not thrown',
   /no Bluetooth/.test(ble.whyUnsupported()));
