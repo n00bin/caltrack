@@ -337,6 +337,32 @@ pulls ZXing from jsDelivr — pinned to one version and locked to a
 ever change. Nothing is fetched until someone actually opens the scanner on
 one of those browsers.
 
+## Reading the scale over Bluetooth
+
+**Trend -> Read from my scale.** Chrome on Android only, and it works if and
+only if your scale implements the Bluetooth SIG standard services: Weight
+Scale (`0x181D`) and Body Composition (`0x181B`). A scale that does will hand
+over weight, body fat and muscle mass to any client. Plenty of budget scales
+do not — they broadcast a proprietary blob that only the vendor app decodes,
+and expose nothing readable. There is no way to tell from outside which sort
+you own except to try, so the app tries and says plainly what it found.
+
+The measurement characteristics *indicate* rather than read, so connecting is
+not enough: stand on the scale while connected and the reading arrives when it
+finishes measuring. It fills the weigh-in boxes rather than saving, so you
+still check the numbers before they become a record.
+
+`bluetooth.js` keeps the packet parsing separate from the connecting, because
+the parsing is the half that can be tested without a scale — `test-bluetooth.js`
+builds packets byte by byte from the spec. That matters most for the body
+composition packet, where every field after body fat is optional and they
+appear in a fixed order: read the order wrong and muscle mass silently comes
+back as body water. Writing those tests also turned up a crash on a truncated
+packet, which a real scale can send.
+
+The connecting half is **not** verifiable here — no scale, no Bluetooth, no
+phone. If it does nothing, that is the untested half.
+
 ## Checking your own library
 
 **Settings -> Check my foods** goes through everything saved and reports what

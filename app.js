@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1319+22aa166';
+  var BUILD = '2026-08-31.1328+ae8ede9';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1313,6 +1313,7 @@
 
   function renderTrend() {
     if (!$('weightDate').value) $('weightDate').value = localDate(new Date());
+    $('bleBox').hidden = !CalTrack.ble.supported();
 
     Promise.all([store.weighIns.all(), store.log.all()]).then(function (res) {
       var weighIns = res[0];
@@ -2014,6 +2015,45 @@
 
   // ------------------------------------------------------------ settings
 
+  // ---------------------------------------------------- reading the scale
+
+  /* Fills the weigh-in boxes from the scale rather than saving straight
+   * away: the numbers are still checked by eye before they become a record,
+   * and the Save button stays the thing that commits.
+   */
+  function connectScale(allDevices) {
+    var msg = $('bleMsg');
+    clearMsg(msg);
+
+    if (!CalTrack.ble.supported()) {
+      showError(msg, CalTrack.ble.whyUnsupported() ||
+        'This browser cannot talk to Bluetooth devices.');
+      return;
+    }
+
+    CalTrack.ble.connect({
+      allDevices: !!allDevices,
+      onStatus: function (text) { clearMsg(msg); msg.textContent = text; },
+      onReading: function (r) {
+        if (r.weight_lbs) $('weightInput').value = round(r.weight_lbs, 1);
+        if (r.body_fat_pct) $('bodyFatInput').value = round(r.body_fat_pct, 1);
+        if (r.muscle_mass_lbs) $('muscleInput').value = round(r.muscle_mass_lbs, 1);
+
+        var got = [];
+        if (r.weight_lbs) got.push('weight');
+        if (r.body_fat_pct) got.push('body fat');
+        if (r.muscle_mass_lbs) got.push('muscle mass');
+        clearMsg(msg);
+        msg.textContent = 'Read ' + got.join(', ') + '. Check it, then Save weight.';
+        if (navigator.vibrate) navigator.vibrate(60);
+      },
+      onError: function (err) {
+        showError(msg, err.message);
+        $('bleAll').hidden = false;   // offer the wider search once
+      }
+    });
+  }
+
   // ------------------------------------------------------ auditing foods
 
   function renderFindings(findings, box) {
@@ -2490,6 +2530,8 @@
     $('mealLogConfirm').addEventListener('click', confirmMealLog);
 
     $('saveWeight').addEventListener('click', saveWeighIn);
+    $('bleConnect').addEventListener('click', function () { connectScale(false); });
+    $('bleAll').addEventListener('click', function () { connectScale(true); });
     $('weightInput').addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter') { ev.preventDefault(); saveWeighIn(); }
     });
