@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1423+085bfd1';
+  var BUILD = '2026-08-31.1430+df8624e';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1410,18 +1410,30 @@
         Math.floor(height / 12) + "'" + Math.round(height % 12) + '", that is ' +
         b.category + '.'));
 
-      // Where the goal weight would land, so the bar is about you rather
-      // than about the population the thresholds came from.
-      var goal = state.settings.goal_weight_lbs;
-      var goalBmi = (goal > 0) ? T.bmi(goal, height) : null;
-      box.appendChild(bmiBar(b.bmi, goalBmi ? goalBmi.bmi : null));
+      box.appendChild(bmiBar(b.bmi));
 
-      box.appendChild(hintP('Those bands are population screening thresholds, ' +
-        'not a target set for you - BMI cannot tell muscle from fat, so it reads ' +
-        'heavy for anyone who lifts.' +
-        (goalBmi ? ' The lower mark is where your goal weight of ' +
-          round(goal, 1) + ' lb would put you.'
-                 : ' Set a goal weight and it will be marked on here too.')));
+      // The band in pounds, which is the part that is actually about you.
+      var range = T.healthyWeightRange(height);
+      var feet = Math.floor(height / 12) + "'" + Math.round(height % 12) + '"';
+      var text = 'A healthy weight at ' + feet + ' is ' + round(range.min) +
+        ' to ' + round(range.max) + ' lb. ';
+
+      if (current > range.max) {
+        text += 'You are ' + round(current - range.max) + ' lb above that.';
+      } else if (current < range.min) {
+        text += 'You are ' + round(range.min - current) + ' lb below it.';
+      } else {
+        text += 'You are in it.';
+      }
+      box.appendChild(hintP(text));
+
+      // Age does not move the adult thresholds, with one exception worth
+      // saying out loud rather than quietly encoding.
+      if (state.settings.age >= 65) {
+        box.appendChild(hintP('That band is the same at every adult age. Past ' +
+          '65 though, a number of guidelines suggest aiming a little higher ' +
+          'than the bottom of it - some reserve is protective at that point.'));
+      }
     } else if (current) {
       box.appendChild(hintP('BMI needs your height. Put it in Settings, under ' +
         'Daily target, and it appears here.'));
@@ -1479,11 +1491,10 @@
       'loo. Only the trend across many readings means anything.'));
   }
 
-  /* The BMI bar: coloured bands, a marker for now, and a second marker for
-   * the goal weight. Built from trend.js's segments so the thresholds live
-   * in one place.
+  /* The BMI bar: coloured bands and a marker for where you are. Built from
+   * trend.js's segments so the thresholds live in one place.
    */
-  function bmiBar(current, goal) {
+  function bmiBar(current) {
     var T = CalTrack.trend;
     var wrap = document.createElement('div');
     wrap.className = 'bmibar-wrap';
@@ -1508,17 +1519,6 @@
     you.innerHTML = '<b>' + round(current, 1) + '</b>you';
     marks.appendChild(you);
 
-    if (goal) {
-      var g = document.createElement('div');
-      g.className = 'bmimark goal';
-      g.style.left = T.bmiPercent(goal) + '%';
-      g.innerHTML = '<b>' + round(goal, 1) + '</b>goal';
-      // Two marks on the same spot would overlap illegibly.
-      if (Math.abs(T.bmiPercent(goal) - T.bmiPercent(current)) < 6) {
-        g.style.top = '15px';
-      }
-      marks.appendChild(g);
-    }
     wrap.appendChild(marks);
 
     var scale = document.createElement('div');

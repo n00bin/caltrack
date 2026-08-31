@@ -55,9 +55,10 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   rather than predicted from a formula, with an honest label on it: *not yet
   reliable*, *early estimate*, or *measured*.
 - **BMI and body composition** — BMI from your height and smoothed weight, on
-  a banded bar with your current figure marked and, if you have set one, your
-  goal weight marked beside it. The bands are population thresholds; the goal
-  mark is the part that is about you. A
+  a banded bar with your position marked, and underneath it the healthy band
+  translated into actual pounds for your height: *"A healthy weight at 5'10"
+  is 129 to 174 lb."* BMI divides height out already, so the band is the same
+  for everyone — only the weight it lands on changes. A
   weigh-in also takes **body fat %** and **muscle mass** if your scale reports
   them, and the app tracks which of fat and muscle is actually moving.
 - **Getting to your goal** — a date, worked out from the trend you are

@@ -421,9 +421,6 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
   line-height: 1;
   color: var(--text);
 }
-.bmimark.goal::before { color: var(--muted); }
-.bmimark.goal b { color: var(--muted); font-weight: 600; }
-
 .bmiscale {
   display: flex; justify-content: space-between;
   font-size: .65rem; color: var(--muted); margin-top: 2px;

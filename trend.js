@@ -556,6 +556,28 @@ CalTrack.trend = (function () {
     return { bmi: value, category: band.name };
   }
 
+  /* The healthy BMI band turned into actual pounds, for one height.
+   *
+   * BMI already divides out height, which is the whole point of it - so the
+   * healthy BAND is 18.5 to 25 for everyone, tall or short. What changes with
+   * height is the WEIGHT that lands in it, and that is the number worth
+   * showing someone.
+   *
+   * Age does not move the adult cutoffs either. The one real caveat is that
+   * for people past about 65 a number of guidelines suggest aiming slightly
+   * higher, since a little reserve is protective at that age - so that gets
+   * said rather than silently shifting the bands.
+   */
+  function healthyWeightRange(heightIn) {
+    if (!(heightIn > 0)) return null;
+    var perBmi = (heightIn * heightIn) / 703;
+    return {
+      min: 18.5 * perBmi,
+      max: 25 * perBmi,
+      heightIn: heightIn
+    };
+  }
+
   /* Body composition, and the only honest answer to "am I gaining muscle?".
    *
    * A scale weighs everything at once. Nothing in intake or weight alone can
@@ -780,6 +802,7 @@ CalTrack.trend = (function () {
     BMI_MIN: BMI_MIN,
     BMI_MAX: BMI_MAX,
     bmiPercent: bmiPercent,
+    healthyWeightRange: healthyWeightRange,
     bmiSegments: bmiSegments,
     composition: composition,
     readTissueRate: readTissueRate,

@@ -386,6 +386,27 @@ eq('exactly 25 is overweight, not healthy',
   T.bmi(25 * 4900 / 703, 70).category, 'the overweight range');
 eq('a hair under 25 is still healthy', T.bmi(174.2, 70).category, 'the healthy range');
 
+// --- the healthy band, in pounds ----------------------------------------
+// BMI already divides out height, so the BAND is the same for everyone and
+// only the weight it corresponds to moves. These must round-trip exactly.
+{
+  const r = T.healthyWeightRange(70);
+  near('the bottom of the band is BMI 18.5', T.bmi(r.min, 70).bmi, 18.5, 1e-9);
+  near('and the top is BMI 25', T.bmi(r.max, 70).bmi, 25, 1e-9);
+  near('which at 5 foot 10 is about 129 lb', r.min, 129, 0.5);
+  near('to about 174 lb', r.max, 174, 0.5);
+}
+{
+  // Taller means the same band lands on more pounds.
+  const short = T.healthyWeightRange(62);
+  const tall = T.healthyWeightRange(76);
+  ok('a taller person has a heavier healthy range', tall.min > short.min);
+  near('but both ends are still BMI 18.5', T.bmi(tall.min, 76).bmi, 18.5, 1e-9);
+  near('and 25', T.bmi(short.max, 62).bmi, 25, 1e-9);
+}
+eq('no height, no range', T.healthyWeightRange(0), null);
+eq('nor a negative one', T.healthyWeightRange(-70), null);
+
 // --- the BMI bar --------------------------------------------------------
 {
   const segs = T.bmiSegments();
