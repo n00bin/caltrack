@@ -55,9 +55,9 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   rather than predicted from a formula, with an honest label on it: *not yet
   reliable*, *early estimate*, or *measured*.
 - **BMI and body composition** — BMI from your height and smoothed weight,
-  with its category and the caveat that it cannot tell muscle from fat. Add a
-  body fat percentage beside a weigh-in and it splits you into lean and fat
-  mass and reports which one is actually moving.
+  with its category and the caveat that it cannot tell muscle from fat. A
+  weigh-in also takes **body fat %** and **muscle mass** if your scale reports
+  them, and the app tracks which of fat and muscle is actually moving.
 - **Getting to your goal** — a date, worked out from the trend you are
   actually on rather than the one you meant to be on, with the planned-rate
   date beside it for comparison. Flat or going the wrong way gives no date and
@@ -242,18 +242,28 @@ detection below exists precisely because that bend is real.
 
 **On muscle.** Nothing in a weight or a calorie count can separate muscle from
 fat from water — an app claiming to track muscle gain from those alone is
-guessing. What this does instead is arithmetic on a number you measured: if a
-weigh-in carries a body fat percentage, fat mass is weight x fat% and lean
-mass is the rest, and watching those two diverge is as close as it gets
-without a scan.
+guessing. What this does instead is use numbers you measured.
 
-Two warnings travel with that figure everywhere it appears. Lean mass is
+If your scale reports **muscle mass**, that figure is taken as given — it at
+least attempts to name the muscle part, where lean mass is muscle plus water
+plus bone plus organs. If it reports **body fat %**, fat mass is weight x fat%
+and lean mass is the rest. Either alone works; both is better. Watching fat
+and muscle diverge is as close as this gets without a scan.
+
+Two warnings travel with those figures everywhere they appear. Lean mass is
 muscle *and* water *and* glycogen *and* organs, so a two-pound jump in a week
 is a refilled glycogen store, not new muscle — real muscle arrives at a
 quarter to half a pound a week at best, and slower in a deficit. And consumer
 scales measure fat by passing a current through you, which hydration shifts by
 several points, so only the trend across many readings means anything. The
 confidence label needs six readings across a month before it says "measured".
+
+They are also not independent of one another. A bioimpedance scale takes
+**one** electrical measurement and derives fat, muscle and water from it,
+along with the height and age programmed into the scale — so if fat reads
+low, muscle reads high by construction. Weigh in the same conditions every
+time: same hour, before eating or drinking. Otherwise you are reading your
+hydration.
 
 **Things it refuses to do:**
 
