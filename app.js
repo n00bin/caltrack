@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1304+67d4207';
+  var BUILD = '2026-08-31.1313+43b0e81';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1328,6 +1328,7 @@
       });
       renderTdee(measured);
 
+      renderComposition(weighIns);
       renderGoal(T.projectGoal({
         weighIns: weighIns, settings: state.settings, asOf: localDate(new Date())
       }));
@@ -1387,6 +1388,86 @@
           '. This measured figure replaces it.';
       box.appendChild(handover);
     }
+  }
+
+  function renderComposition(weighIns) {
+    var box = $('compBody');
+    box.innerHTML = '';
+    var T = CalTrack.trend;
+
+    // --- BMI ---
+    var smoothed = T.emaSeries(weighIns);
+    var current = smoothed.length ? smoothed[smoothed.length - 1].ema : null;
+    var height = state.settings.height_in;
+
+    if (current && height > 0) {
+      var b = T.bmi(current, height);
+      var line = document.createElement('div');
+      line.className = 'bignum';
+      line.innerHTML = '<b>' + round(b.bmi, 1) + '</b> BMI';
+      box.appendChild(line);
+      box.appendChild(hintP('At ' + round(current, 1) + ' lb and ' +
+        Math.floor(height / 12) + "'" + Math.round(height % 12) + '", that is ' +
+        b.category + '. BMI cannot tell muscle from fat, so it reads heavy for ' +
+        'anyone who lifts - it is a rough screening number, not a verdict.'));
+    } else if (current) {
+      box.appendChild(hintP('Put your height into Settings and BMI appears here.'));
+    }
+
+    // --- composition ---
+    var c = T.composition(weighIns);
+    if (!c.readings) {
+      box.appendChild(hintP('There is no way to measure muscle from a scale ' +
+        'reading - weight is everything at once. If you have a body fat ' +
+        'percentage from a smart scale, calipers or a scan, add it beside your ' +
+        'weight and this will split you into lean and fat mass and show which ' +
+        'one is actually moving.'));
+      return;
+    }
+    if (c.readings < 2) {
+      box.appendChild(hintP('One body fat reading recorded. A second one, a few ' +
+        'weeks apart, is what makes it useful.'));
+      return;
+    }
+
+    var badge = document.createElement('span');
+    badge.className = 'badge badge-' + c.confidence;
+    badge.textContent = c.confidence === 'ok' ? 'measured'
+      : c.confidence === 'low' ? 'early' : 'too soon to read';
+    box.appendChild(badge);
+
+    box.appendChild(hintP('Over ' + c.days + ' days: lean mass ' +
+      signed(c.leanChange) + ' lb, fat mass ' + signed(c.fatChange) + ' lb, ' +
+      'total ' + signed(c.weightChange) + ' lb. Body fat ' +
+      round(c.first.bodyFatPct, 1) + '% to ' + round(c.last.bodyFatPct, 1) + '%.'));
+
+    if (c.leanPerWeek !== undefined) {
+      var lean = c.leanPerWeek;
+      var verdict;
+      if (lean > 0.6) {
+        verdict = 'Lean mass rising at ' + round(lean, 2) + ' lb a week is faster ' +
+          'than muscle is built - that is mostly water and glycogen.';
+      } else if (lean > 0.05) {
+        verdict = 'Lean mass rising at ' + round(lean, 2) + ' lb a week is in the ' +
+          'range real muscle actually arrives at.';
+      } else if (lean > -0.05) {
+        verdict = 'Lean mass is holding, which is the goal while losing fat.';
+      } else {
+        verdict = 'Lean mass is falling at ' + round(Math.abs(lean), 2) + ' lb a ' +
+          'week. Usually too big a deficit, too little protein, or no resistance ' +
+          'training - often all three.';
+      }
+      box.appendChild(hintP(verdict));
+    }
+
+    box.appendChild(hintP('Lean mass is muscle and water and glycogen and organs ' +
+      'together, and consumer scales measure fat by passing a current through you, ' +
+      'which hydration shifts by several points. Only the trend across many ' +
+      'readings means anything - a single pair of readings does not.'));
+  }
+
+  function signed(n) {
+    return (n > 0 ? '+' : '') + round(n, 1);
   }
 
   function renderGoal(g) {
@@ -1541,13 +1622,23 @@
     if (!isFinite(lbs) || lbs <= 0) { showError(msg, 'Enter your weight in pounds.'); return; }
     if (lbs > 1000) { showError(msg, 'That looks like grams rather than pounds.'); return; }
 
+    var fat = parseFloat($('bodyFatInput').value);
+    var record = { weight_lbs: lbs };
+    if (isFinite(fat) && fat > 0 && fat < 70) {
+      record.body_fat_pct = fat;
+    } else if ($('bodyFatInput').value.trim()) {
+      showError(msg, 'Body fat should be a percentage between 0 and 70.');
+      return;
+    }
+
     // One reading per day: weighing twice replaces, it does not stack.
     store.weighIns.query(function (w) { return w.date === date; }).then(function (hits) {
       return hits.length
-        ? store.weighIns.update(hits[0].id, { weight_lbs: lbs })
-        : store.weighIns.insert({ date: date, weight_lbs: lbs, user_id: null });
+        ? store.weighIns.update(hits[0].id, record)
+        : store.weighIns.insert(Object.assign({ date: date, user_id: null }, record));
     }).then(function () {
       $('weightInput').value = '';
+      $('bodyFatInput').value = '';
       toast('Weight saved');
       renderTrend();
     }).catch(function (err) { showError(msg, err.message); });

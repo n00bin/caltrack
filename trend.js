@@ -497,6 +497,84 @@ CalTrack.trend = (function () {
     };
   }
 
+  /* BMI. Weight over height squared, in the imperial form.
+   *
+   * It is a screening number for populations, not a verdict on a person: it
+   * cannot tell muscle from fat, so it reads heavy for anyone who lifts and
+   * light for someone thin with little muscle. Reported with its category
+   * and that caveat attached, because a bare number invites the wrong reading.
+   */
+  var BMI_BANDS = [
+    { upto: 18.5, name: 'under the healthy range' },
+    { upto: 25, name: 'the healthy range' },
+    { upto: 30, name: 'the overweight range' },
+    { upto: Infinity, name: 'the obese range' }
+  ];
+
+  function bmi(weightLbs, heightIn) {
+    if (!(weightLbs > 0) || !(heightIn > 0)) return null;
+    var value = 703 * weightLbs / (heightIn * heightIn);
+    var band = BMI_BANDS.filter(function (b) { return value < b.upto; })[0];
+    return { bmi: value, category: band.name };
+  }
+
+  /* Body composition, and the only honest answer to "am I gaining muscle?".
+   *
+   * A scale weighs everything at once. Nothing in intake or weight alone can
+   * separate muscle from fat from water - an app claiming otherwise is
+   * guessing. What CAN be done is arithmetic on a body fat percentage you
+   * measured: fat mass is weight x fat%, lean mass is the rest, and watching
+   * those two move apart is as close as this gets.
+   *
+   * Two warnings travel with it. Lean mass is muscle AND water AND glycogen
+   * AND organs, so a two-pound jump in a week is a full glycogen store, not
+   * new muscle - real muscle arrives at a quarter to half a pound a week at
+   * best, and slower in a deficit. And consumer scales measure fat by passing
+   * a current through you, which hydration moves by several points, so only
+   * the trend across many readings means anything.
+   */
+  function composition(weighIns) {
+    var rows = (weighIns || [])
+      .filter(function (w) {
+        return w && w.date && isFinite(w.weight_lbs) &&
+          isFinite(w.body_fat_pct) && w.body_fat_pct > 0 && w.body_fat_pct < 70;
+      })
+      .slice().sort(byDate)
+      .map(function (w) {
+        var fat = w.weight_lbs * (w.body_fat_pct / 100);
+        return {
+          date: w.date,
+          weight: w.weight_lbs,
+          bodyFatPct: w.body_fat_pct,
+          fatMass: fat,
+          leanMass: w.weight_lbs - fat
+        };
+      });
+
+    var out = { readings: rows.length, series: rows, first: null, last: null };
+    if (rows.length < 2) return out;
+
+    var first = rows[0], last = rows[rows.length - 1];
+    var days = dayNumber(last.date) - dayNumber(first.date);
+
+    out.first = first;
+    out.last = last;
+    out.days = days;
+    out.fatChange = last.fatMass - first.fatMass;
+    out.leanChange = last.leanMass - first.leanMass;
+    out.weightChange = last.weight - first.weight;
+
+    if (days >= 7) {
+      out.leanPerWeek = out.leanChange / (days / 7);
+      out.fatPerWeek = out.fatChange / (days / 7);
+    }
+
+    // Under a month, body fat readings are mostly noise.
+    out.confidence = (rows.length >= 6 && days >= 28) ? 'ok'
+      : (rows.length >= 3 && days >= 14) ? 'low' : 'none';
+    return out;
+  }
+
   /* When will the goal weight arrive?
    *
    * Two answers, because they are different questions. The MEASURED one
@@ -607,6 +685,8 @@ CalTrack.trend = (function () {
     plateau: plateau,
     adjustment: adjustment,
     projectGoal: projectGoal,
+    bmi: bmi,
+    composition: composition,
     floorFor: floorFor,
     targetFor: targetFor,
     ACTIVITY: ACTIVITY,

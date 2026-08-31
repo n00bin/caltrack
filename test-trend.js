@@ -372,6 +372,73 @@ ok('an empty profile is an error', !!T.estimateTdee({}).error);
   eq('and one shared floor', viaAdjustment.floor, viaTarget.floor);
 }
 
+// ------------------------------------------------------------ BMI
+// 703 x 180 / 70^2 = 25.83
+near('BMI for 180 lb at 5 foot 10', T.bmi(180, 70).bmi, 703 * 180 / 4900, 1e-9);
+eq('and its band', T.bmi(180, 70).category, 'the overweight range');
+eq('healthy', T.bmi(150, 70).category, 'the healthy range');
+eq('under', T.bmi(120, 70).category, 'under the healthy range');
+eq('obese', T.bmi(220, 70).category, 'the obese range');
+eq('no height, no BMI', T.bmi(180, 0), null);
+eq('no weight, no BMI', T.bmi(0, 70), null);
+// The boundary belongs to the band above it: 25 x 4900 / 703 lb is exactly 25.
+eq('exactly 25 is overweight, not healthy',
+  T.bmi(25 * 4900 / 703, 70).category, 'the overweight range');
+eq('a hair under 25 is still healthy', T.bmi(174.2, 70).category, 'the healthy range');
+
+// ------------------------------------------- lean and fat mass
+{
+  // 200 lb at 25% fat -> 50 lb fat, 150 lb lean.
+  const c = T.composition([
+    { date: '2026-01-01', weight_lbs: 200, body_fat_pct: 25 },
+    { date: '2026-02-12', weight_lbs: 190, body_fat_pct: 20 }
+  ]);
+  eq('two readings used', c.readings, 2);
+  near('fat mass at the start', c.first.fatMass, 50);
+  near('lean mass at the start', c.first.leanMass, 150);
+  near('fat mass at the end', c.last.fatMass, 38);
+  near('lean mass at the end', c.last.leanMass, 152);
+  near('so 12 lb of fat went', c.fatChange, -12, 1e-9);
+  near('and 2 lb of lean arrived', c.leanChange, 2, 1e-9);
+  near('while the scale moved 10', c.weightChange, -10, 1e-9);
+  eq('42 days spanned', c.days, 42);
+}
+
+// Readings without a body fat figure are ignored rather than assumed.
+{
+  const c = T.composition([
+    { date: '2026-01-01', weight_lbs: 200, body_fat_pct: 25 },
+    { date: '2026-01-02', weight_lbs: 199 },
+    { date: '2026-01-03', weight_lbs: 198, body_fat_pct: 24.6 }
+  ]);
+  eq('only the measured ones count', c.readings, 2);
+}
+eq('an impossible body fat is skipped',
+  T.composition([{ date: '2026-01-01', weight_lbs: 200, body_fat_pct: 95 }]).readings, 0);
+eq('no readings at all', T.composition([]).readings, 0);
+eq('one reading is not a trend', T.composition(
+  [{ date: '2026-01-01', weight_lbs: 200, body_fat_pct: 25 }]).first, null);
+
+// Confidence: body fat readings are noisy, so a fortnight is not enough.
+{
+  const many = [];
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(T.dayNumber('2026-01-01') * 86400000 + i * 5 * 86400000);
+    many.push({
+      date: T.dateFromDay(T.dayNumber('2026-01-01') + i * 5),
+      weight_lbs: 200 - i, body_fat_pct: 25 - i * 0.3
+    });
+  }
+  eq('eight readings over 35 days is trustworthy', T.composition(many).confidence, 'ok');
+  // Readings are five days apart, so four of them span fifteen days.
+  eq('four readings over a fortnight is early',
+    T.composition(many.slice(0, 4)).confidence, 'low');
+  eq('three of them span only ten days, which is not enough',
+    T.composition(many.slice(0, 3)).confidence, 'none');
+  eq('two readings days apart is not readable yet',
+    T.composition(many.slice(0, 2)).confidence, 'none');
+}
+
 // ------------------------------------------------- when is the goal due
 {
   // 220 lb falling a pound a week, goal 200. Twenty pounds, twenty weeks.

@@ -82,6 +82,9 @@
                placeholder="lbs" aria-label="Weight in pounds">
         <input type="date" id="weightDate" aria-label="Date of this weigh-in">
       </div>
+      <label class="field"><span>Body fat % (optional)</span>
+        <input type="number" id="bodyFatInput" inputmode="decimal" step="0.1"
+               placeholder="only if your scale or a caliper measured it"></label>
       <button id="saveWeight" class="btn primary wide">Save weight</button>
       <p id="weightMsg" class="msg"></p>
     </div>
@@ -95,6 +98,11 @@
     <div class="card">
       <h2>What you actually burn</h2>
       <div id="tdeeBody"></div>
+    </div>
+
+    <div class="card">
+      <h2>BMI and body composition</h2>
+      <div id="compBody"></div>
     </div>
 
     <div class="card">

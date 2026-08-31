@@ -54,6 +54,10 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
 - **What you actually burn** — your TDEE, backed out of what really happened
   rather than predicted from a formula, with an honest label on it: *not yet
   reliable*, *early estimate*, or *measured*.
+- **BMI and body composition** — BMI from your height and smoothed weight,
+  with its category and the caveat that it cannot tell muscle from fat. Add a
+  body fat percentage beside a weigh-in and it splits you into lean and fat
+  mass and reports which one is actually moving.
 - **Getting to your goal** — a date, worked out from the trend you are
   actually on rather than the one you meant to be on, with the planned-rate
   date beside it for comparison. Flat or going the wrong way gives no date and
@@ -235,6 +239,21 @@ and the line bends. A projection is therefore optimistic by construction, and
 more so the further out it reaches. The app says that under the date rather
 than presenting an extrapolation as a delivery date — and the plateau
 detection below exists precisely because that bend is real.
+
+**On muscle.** Nothing in a weight or a calorie count can separate muscle from
+fat from water — an app claiming to track muscle gain from those alone is
+guessing. What this does instead is arithmetic on a number you measured: if a
+weigh-in carries a body fat percentage, fat mass is weight x fat% and lean
+mass is the rest, and watching those two diverge is as close as it gets
+without a scan.
+
+Two warnings travel with that figure everywhere it appears. Lean mass is
+muscle *and* water *and* glycogen *and* organs, so a two-pound jump in a week
+is a refilled glycogen store, not new muscle — real muscle arrives at a
+quarter to half a pound a week at best, and slower in a deficit. And consumer
+scales measure fat by passing a current through you, which hydration shifts by
+several points, so only the trend across many readings means anything. The
+confidence label needs six readings across a month before it says "measured".
 
 **Things it refuses to do:**
 
