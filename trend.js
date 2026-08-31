@@ -536,18 +536,25 @@ CalTrack.trend = (function () {
   function composition(weighIns) {
     var rows = (weighIns || [])
       .filter(function (w) {
-        return w && w.date && isFinite(w.weight_lbs) &&
-          isFinite(w.body_fat_pct) && w.body_fat_pct > 0 && w.body_fat_pct < 70;
+        if (!w || !w.date || !isFinite(w.weight_lbs)) return false;
+        var hasFat = isFinite(w.body_fat_pct) && w.body_fat_pct > 0 && w.body_fat_pct < 70;
+        var hasMuscle = isFinite(w.muscle_mass_lbs) && w.muscle_mass_lbs > 0 &&
+          w.muscle_mass_lbs < w.weight_lbs;
+        return hasFat || hasMuscle;
       })
       .slice().sort(byDate)
       .map(function (w) {
-        var fat = w.weight_lbs * (w.body_fat_pct / 100);
+        var hasFat = isFinite(w.body_fat_pct) && w.body_fat_pct > 0 && w.body_fat_pct < 70;
+        var fat = hasFat ? w.weight_lbs * (w.body_fat_pct / 100) : null;
+        var muscle = (isFinite(w.muscle_mass_lbs) && w.muscle_mass_lbs > 0 &&
+          w.muscle_mass_lbs < w.weight_lbs) ? w.muscle_mass_lbs : null;
         return {
           date: w.date,
           weight: w.weight_lbs,
-          bodyFatPct: w.body_fat_pct,
+          bodyFatPct: hasFat ? w.body_fat_pct : null,
           fatMass: fat,
-          leanMass: w.weight_lbs - fat
+          leanMass: hasFat ? w.weight_lbs - fat : null,
+          muscleMass: muscle
         };
       });
 
@@ -560,13 +567,34 @@ CalTrack.trend = (function () {
     out.first = first;
     out.last = last;
     out.days = days;
-    out.fatChange = last.fatMass - first.fatMass;
-    out.leanChange = last.leanMass - first.leanMass;
     out.weightChange = last.weight - first.weight;
 
-    if (days >= 7) {
-      out.leanPerWeek = out.leanChange / (days / 7);
-      out.fatPerWeek = out.fatChange / (days / 7);
+    if (first.fatMass !== null && last.fatMass !== null) {
+      out.fatChange = last.fatMass - first.fatMass;
+      out.leanChange = last.leanMass - first.leanMass;
+      if (days >= 7) {
+        out.leanPerWeek = out.leanChange / (days / 7);
+        out.fatPerWeek = out.fatChange / (days / 7);
+      }
+    }
+
+    /* A scale that reports muscle mass gives it directly, which beats
+     * subtracting fat from weight: lean mass is muscle plus water plus bone
+     * plus organs, while this at least tries to name the muscle part. It
+     * comes from the same impedance measurement though, so it is no more
+     * independent - see the warnings the caller prints.
+     */
+    var withMuscle = rows.filter(function (r) { return r.muscleMass !== null; });
+    if (withMuscle.length >= 2) {
+      var mFirst = withMuscle[0];
+      var mLast = withMuscle[withMuscle.length - 1];
+      var mDays = dayNumber(mLast.date) - dayNumber(mFirst.date);
+      out.muscleReadings = withMuscle.length;
+      out.muscleDays = mDays;
+      out.muscleChange = mLast.muscleMass - mFirst.muscleMass;
+      out.muscleFirst = mFirst.muscleMass;
+      out.muscleLast = mLast.muscleMass;
+      if (mDays >= 7) out.musclePerWeek = out.muscleChange / (mDays / 7);
     }
 
     // Under a month, body fat readings are mostly noise.
@@ -669,6 +697,31 @@ CalTrack.trend = (function () {
     return base;
   }
 
+  /* What a rate of lean or muscle change actually means.
+   *
+   * Muscle is built slowly - a quarter to half a pound a week is a good
+   * novice rate in a surplus, and a deficit makes it slower still. Anything
+   * far above that is the body's water content moving, which a bioimpedance
+   * scale cannot tell apart from tissue.
+   */
+  function readTissueRate(perWeek, what) {
+    if (perWeek === undefined || perWeek === null) return '';
+    if (perWeek > 0.6) {
+      return what + ' rising at ' + Math.round(perWeek * 100) / 100 + ' lb a week ' +
+        'is faster than muscle is built - most of that is water and glycogen.';
+    }
+    if (perWeek > 0.05) {
+      return what + ' rising at ' + Math.round(perWeek * 100) / 100 + ' lb a week ' +
+        'is in the range real muscle actually arrives at.';
+    }
+    if (perWeek > -0.05) {
+      return what + ' is holding, which is the goal while fat comes off.';
+    }
+    return what + ' is falling at ' + Math.round(Math.abs(perWeek) * 100) / 100 +
+      ' lb a week. Usually too big a deficit, too little protein, or no ' +
+      'resistance training - often all three.';
+  }
+
   return {
     KCAL_PER_LB: KCAL_PER_LB,
     EMA_ALPHA: EMA_ALPHA,
@@ -687,6 +740,7 @@ CalTrack.trend = (function () {
     projectGoal: projectGoal,
     bmi: bmi,
     composition: composition,
+    readTissueRate: readTissueRate,
     floorFor: floorFor,
     targetFor: targetFor,
     ACTIVITY: ACTIVITY,

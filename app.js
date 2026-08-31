@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1313+43b0e81';
+  var BUILD = '2026-08-31.1319+22aa166';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1441,29 +1441,23 @@
       'total ' + signed(c.weightChange) + ' lb. Body fat ' +
       round(c.first.bodyFatPct, 1) + '% to ' + round(c.last.bodyFatPct, 1) + '%.'));
 
-    if (c.leanPerWeek !== undefined) {
-      var lean = c.leanPerWeek;
-      var verdict;
-      if (lean > 0.6) {
-        verdict = 'Lean mass rising at ' + round(lean, 2) + ' lb a week is faster ' +
-          'than muscle is built - that is mostly water and glycogen.';
-      } else if (lean > 0.05) {
-        verdict = 'Lean mass rising at ' + round(lean, 2) + ' lb a week is in the ' +
-          'range real muscle actually arrives at.';
-      } else if (lean > -0.05) {
-        verdict = 'Lean mass is holding, which is the goal while losing fat.';
-      } else {
-        verdict = 'Lean mass is falling at ' + round(Math.abs(lean), 2) + ' lb a ' +
-          'week. Usually too big a deficit, too little protein, or no resistance ' +
-          'training - often all three.';
-      }
-      box.appendChild(hintP(verdict));
+    if (c.muscleChange !== undefined) {
+      box.appendChild(hintP('Muscle mass ' + signed(c.muscleChange) + ' lb over ' +
+        c.muscleDays + ' days, ' + round(c.muscleFirst, 1) + ' to ' +
+        round(c.muscleLast, 1) + ' lb.'));
+      var mVerdict = T.readTissueRate(c.musclePerWeek, 'Muscle');
+      if (mVerdict) box.appendChild(hintP(mVerdict));
+    } else if (c.leanPerWeek !== undefined) {
+      var lVerdict = T.readTissueRate(c.leanPerWeek, 'Lean mass');
+      if (lVerdict) box.appendChild(hintP(lVerdict));
     }
 
-    box.appendChild(hintP('Lean mass is muscle and water and glycogen and organs ' +
-      'together, and consumer scales measure fat by passing a current through you, ' +
-      'which hydration shifts by several points. Only the trend across many ' +
-      'readings means anything - a single pair of readings does not.'));
+    box.appendChild(hintP('Your scale works out fat, muscle and water from one ' +
+      'electrical measurement plus the height and age programmed into it, so those ' +
+      'figures are not independent of each other - if fat reads low, muscle reads ' +
+      'high by construction. Hydration moves it by several points, so weigh in the ' +
+      'same conditions each time: same hour, before eating or drinking, after the ' +
+      'loo. Only the trend across many readings means anything.'));
   }
 
   function signed(n) {
@@ -1623,11 +1617,20 @@
     if (lbs > 1000) { showError(msg, 'That looks like grams rather than pounds.'); return; }
 
     var fat = parseFloat($('bodyFatInput').value);
+    var muscle = parseFloat($('muscleInput').value);
     var record = { weight_lbs: lbs };
+
     if (isFinite(fat) && fat > 0 && fat < 70) {
       record.body_fat_pct = fat;
     } else if ($('bodyFatInput').value.trim()) {
       showError(msg, 'Body fat should be a percentage between 0 and 70.');
+      return;
+    }
+
+    if (isFinite(muscle) && muscle > 0 && muscle < lbs) {
+      record.muscle_mass_lbs = muscle;
+    } else if ($('muscleInput').value.trim()) {
+      showError(msg, 'Muscle mass should be in pounds, and less than your weight.');
       return;
     }
 
@@ -1639,6 +1642,7 @@
     }).then(function () {
       $('weightInput').value = '';
       $('bodyFatInput').value = '';
+      $('muscleInput').value = '';
       toast('Weight saved');
       renderTrend();
     }).catch(function (err) { showError(msg, err.message); });

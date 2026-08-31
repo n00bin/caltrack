@@ -82,9 +82,14 @@
                placeholder="lbs" aria-label="Weight in pounds">
         <input type="date" id="weightDate" aria-label="Date of this weigh-in">
       </div>
-      <label class="field"><span>Body fat % (optional)</span>
-        <input type="number" id="bodyFatInput" inputmode="decimal" step="0.1"
-               placeholder="only if your scale or a caliper measured it"></label>
+      <div class="grid4">
+        <label class="field"><span>Body fat % (optional)</span>
+          <input type="number" id="bodyFatInput" inputmode="decimal" step="0.1"
+                 placeholder="from your scale"></label>
+        <label class="field"><span>Muscle mass, lb (optional)</span>
+          <input type="number" id="muscleInput" inputmode="decimal" step="0.1"
+                 placeholder="from your scale"></label>
+      </div>
       <button id="saveWeight" class="btn primary wide">Save weight</button>
       <p id="weightMsg" class="msg"></p>
     </div>

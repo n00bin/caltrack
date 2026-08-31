@@ -439,6 +439,55 @@ eq('one reading is not a trend', T.composition(
     T.composition(many.slice(0, 2)).confidence, 'none');
 }
 
+// ------------------------------------ muscle mass straight from the scale
+{
+  const c = T.composition([
+    { date: '2026-01-01', weight_lbs: 200, body_fat_pct: 25, muscle_mass_lbs: 88 },
+    { date: '2026-02-12', weight_lbs: 190, body_fat_pct: 20, muscle_mass_lbs: 89.5 }
+  ]);
+  near('the scale figure is used as given', c.muscleFirst, 88);
+  near('and its change', c.muscleChange, 1.5, 1e-9);
+  eq('over the days between those two', c.muscleDays, 42);
+  near('a quarter pound a week', c.musclePerWeek, 1.5 / 6, 1e-9);
+  // Fat and lean still come from the percentage, independently.
+  near('fat still tracked', c.fatChange, -12, 1e-9);
+}
+
+// A scale that reports muscle but no body fat is still usable.
+{
+  const c = T.composition([
+    { date: '2026-01-01', weight_lbs: 200, muscle_mass_lbs: 88 },
+    { date: '2026-02-12', weight_lbs: 195, muscle_mass_lbs: 89 }
+  ]);
+  eq('both readings count', c.readings, 2);
+  near('muscle change', c.muscleChange, 1, 1e-9);
+  eq('with no body fat there is no fat figure', c.fatChange, undefined);
+  eq('nor a lean one', c.leanChange, undefined);
+}
+
+// Nonsense muscle values are ignored rather than believed.
+eq('muscle heavier than the person', T.composition(
+  [{ date: '2026-01-01', weight_lbs: 200, muscle_mass_lbs: 250 }]).readings, 0);
+eq('negative muscle', T.composition(
+  [{ date: '2026-01-01', weight_lbs: 200, muscle_mass_lbs: -5 }]).readings, 0);
+
+// One muscle reading is not a trend.
+eq('a single muscle reading gives no rate', T.composition([
+  { date: '2026-01-01', weight_lbs: 200, body_fat_pct: 25, muscle_mass_lbs: 88 },
+  { date: '2026-02-12', weight_lbs: 190, body_fat_pct: 20 }
+]).muscleChange, undefined);
+
+// --- how a rate gets described ------------------------------------------
+ok('2 lb a week is called water, not muscle',
+  /water and glycogen/.test(T.readTissueRate(2, 'Muscle')));
+ok('a third of a pound is called real',
+  /range real muscle actually arrives at/.test(T.readTissueRate(0.33, 'Muscle')));
+ok('holding steady is the goal, not a failure',
+  /holding, which is the goal/.test(T.readTissueRate(0, 'Muscle')));
+ok('losing it names the causes',
+  /too little protein/.test(T.readTissueRate(-0.4, 'Muscle')));
+eq('nothing to describe', T.readTissueRate(null, 'Muscle'), '');
+
 // ------------------------------------------------- when is the goal due
 {
   // 220 lb falling a pound a week, goal 200. Twenty pounds, twenty weeks.
