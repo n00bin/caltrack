@@ -271,12 +271,35 @@ CalTrack.usda = (function () {
     return MEASURE_WORDS.test(String(name || '').trim());
   }
 
+  /* Many foods are listed only as size variants - a burrito comes as
+   * miniature, small/regular and large, a chicken breast as a breast and
+   * two sizes of slice. Taking the smallest made the app quietly
+   * under-report: a "miniature" burrito at 110 g when the regular is 220.
+   *
+   * So a name carrying no size word at all wins - a burrito is a burrito, a
+   * nugget is a nugget. Failing that, the one that says regular or medium.
+   * Only then does size break the tie, and by then it is a genuine choice
+   * between two of the same thing.
+   */
+  var SIZE_WORDS = /\b(miniature|tiny|small|medium|large|jumbo|regular|extra|thin|thick)\b/i;
+  var MIDDLE_WORDS = /\b(regular|medium)\b/i;
+
+  function sizeRank(name) {
+    if (!SIZE_WORDS.test(name)) return 0;     // an unqualified thing
+    if (MIDDLE_WORDS.test(name)) return 1;    // the middle of a range
+    return 2;                                 // an end of a range
+  }
+
   function rankPortions(portions) {
     return portions.slice().sort(function (a, b) {
       var am = isMeasure(a.name) ? 1 : 0;
       var bm = isMeasure(b.name) ? 1 : 0;
       if (am !== bm) return am - bm;          // countable things first
-      return a.grams - b.grams;               // then the smallest of them
+
+      var as = sizeRank(a.name), bs = sizeRank(b.name);
+      if (as !== bs) return as - bs;          // then the unqualified one
+
+      return a.grams - b.grams;               // only then, the smaller
     });
   }
 
@@ -405,8 +428,10 @@ CalTrack.usda = (function () {
     SIGNUP_URL: SIGNUP_URL,
     searchByName: searchByName,
     _rankResults: rankResults,
+    rankPortions: rankPortions,
     _rankPortions: rankPortions,
     _isMeasure: isMeasure,
+    _sizeRank: sizeRank,
     _shouldRetry: shouldRetry,
     byId: byId,
     keyFor: keyFor,

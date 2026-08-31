@@ -165,6 +165,44 @@ usda.searchByName('cheeseburger', null).catch(function (e) {
   eq('a slice beats a loaf', ranked[0].name, 'slice');
 }
 
+/* Size variants are the other trap. A burrito is listed only as miniature,
+ * small/regular and large; taking the smallest under-reported it by half.
+ */
+{
+  const ranked = usda._rankPortions([
+    { name: 'miniature', grams: 110 },
+    { name: 'small/regular', grams: 220 },
+    { name: 'large', grams: 330 },
+    { name: 'cup', grams: 120 }
+  ]);
+  eq('the regular size wins, not the smallest', ranked[0].name, 'small/regular');
+  eq('and the measure is still last', ranked[3].name, 'cup');
+}
+{
+  // A chicken breast used to come out as a 30 g slice.
+  const ranked = usda._rankPortions([
+    { name: 'small breast', grams: 110 },
+    { name: 'medium breast', grams: 130 },
+    { name: 'large breast', grams: 145 },
+    { name: 'cup, cooked, diced', grams: 135 }
+  ]);
+  eq('the medium one', ranked[0].name, 'medium breast');
+}
+{
+  // An unqualified name beats every size variant.
+  const ranked = usda._rankPortions([
+    { name: 'medium slice', grams: 60 },
+    { name: 'breast', grams: 130 },
+    { name: 'small or thin slice', grams: 30 }
+  ]);
+  eq('a breast is a breast', ranked[0].name, 'breast');
+}
+eq('no size word', usda._sizeRank('nugget'), 0);
+eq('a middle size', usda._sizeRank('medium breast'), 1);
+eq('regular counts as middle', usda._sizeRank('small/regular'), 1);
+eq('an end of the range', usda._sizeRank('miniature'), 2);
+eq('so does large', usda._sizeRank('large'), 2);
+
 ok('cup is a measure', usda._isMeasure('cup'));
 ok('so is tbsp', usda._isMeasure('tbsp'));
 ok('and fl oz', usda._isMeasure('fl oz'));

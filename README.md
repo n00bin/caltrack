@@ -26,10 +26,9 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   whether it fits.
 - **Searching by name** — for the things with no barcode: a takeaway, a
   restaurant plate, a raw ingredient. Tap **Search all foods** in the log
-  sheet. It queries USDA's Survey dataset, which is built for asking people
-  what they ate, so "cheeseburger" finds *Cheeseburger (McDonalds)* at
-  110 g rather than twenty frozen supermarket burgers. Needs the free USDA
-  key in Settings.
+  sheet. **13,000 foods are built into the app** — no key, no connection,
+  instant. "chicken nuggets" gives a 16 g nugget, "burrito" a 220 g regular
+  one, "general tso chicken" a 146 g cup.
 - **Scanning** — the Scan button. Point it at a barcode and one of three
   things happens: it's already one of your foods and you go straight to the
   amount box; it's in Open Food Facts and you get a filled-in form to check;
@@ -81,6 +80,36 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   out it was once there's enough logged to know.
 - **Settings** — a daily calorie target, a goal weight, the rate you're aiming
   for, plus backup export/restore.
+
+## The food list built into the app
+
+`food-db.json` is 13,159 foods lifted out of USDA's bulk download by
+`tools/build-food-db.py`: whole dishes from the **Survey (FNDDS)** dataset —
+which exists to record what people actually ate, so it holds *Cheeseburger
+(McDonalds)* and *General Tso chicken* — and raw ingredients from **SR
+Legacy**. 97% carry a household portion. 1.5 MB, downloaded once.
+
+Branded foods are deliberately excluded: that table alone is 954 MB, and the
+barcode scanner covers packets far better than a name search could.
+
+This replaced an API-backed search that needed a free key everybody had to go
+and fetch, a working connection while standing in a kitchen, and tolerance
+for USDA answering a transient 400 to roughly one request in five. A file
+solves all three.
+
+**Which portion becomes the unit you count in** is the part that took the
+most care, because USDA returns them in no useful order:
+
+- A countable thing beats a measure of volume — a *nugget*, not a *cup of
+  nuggets*.
+- An unqualified name beats a size variant — a *breast*, not a *30 g thin
+  slice*.
+- Among size variants, *regular* or *medium* wins. Taking the smallest made
+  a burrito a 110 g "miniature" when the regular is 220 g.
+- Only then does size break the tie.
+
+The service worker keeps this file in its own cache that version bumps do not
+purge, so a deploy does not re-download 1.5 MB.
 
 ## Two food databases, USDA preferred
 

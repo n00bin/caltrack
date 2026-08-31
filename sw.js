@@ -23,7 +23,15 @@
  * honestly rather than quietly serving yesterday's answer.
  */
 
-const VERSION = 'caltrack-2026-08-31.1506+f7f03f3';
+const VERSION = 'caltrack-2026-08-31.1517+ebea779';
+
+/* The food list is 1.5 MB and changes only when USDA publishes a new bulk
+ * download - which is once or twice a year, not once a deploy. So it lives
+ * in its own cache that `activate` does not purge, and is served cache-first.
+ * In the versioned shell it would be re-downloaded on every push.
+ */
+const DATA_CACHE = 'caltrack-data-v1';
+const DATA_FILES = ['food-db.json'];
 const TIMEOUT_MS = 3000;
 
 const SHELL = [
@@ -33,6 +41,7 @@ const SHELL = [
   './store.js',
   './scan.js',
   './usda.js',
+  './foodsearch.js',
   './audit.js',
   './trend.js',
   './app.js',
@@ -57,7 +66,8 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((names) => Promise.all(
-        names.filter((n) => n !== VERSION).map((n) => caches.delete(n))
+        names.filter((n) => n !== VERSION && n !== DATA_CACHE)
+             .map((n) => caches.delete(n))
       ))
       .then(() => self.clients.claim())
   );
@@ -122,12 +132,31 @@ function networkFirst(request) {
   });
 }
 
+function cacheFirst(request) {
+  return caches.open(DATA_CACHE).then((cache) =>
+    cache.match(request).then((hit) => {
+      if (hit) return hit;
+      return fetch(fresh(request)).then((response) => {
+        if (response && response.ok) cache.put(request, response.clone());
+        return response;
+      });
+    })
+  );
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;   // not ours, not our business
+
+  // The food list is big and near-static: serve it from the cache and only
+  // fetch it the first time.
+  if (DATA_FILES.some((f) => url.pathname.endsWith('/' + f))) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
 
   event.respondWith(networkFirst(request));
 });

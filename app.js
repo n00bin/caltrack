@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1506+f7f03f3';
+  var BUILD = '2026-08-31.1517+ebea779';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -365,6 +365,7 @@
     $('pickSearch').placeholder = (which === 'meals') ? 'Search meals' : 'Search food';
     $('pickScanBtn').hidden = (which === 'meals');
     $('pickSearchOnline').hidden = (which === 'meals');
+    $('pickSearchNote').hidden = true;
     $('pickNewFood').textContent = (which === 'meals')
       ? 'Build a new meal' : "Add a food that isn't here yet";
     renderPickResults();
@@ -456,32 +457,34 @@
    * is built for exactly this - it holds whole dishes with household
    * portions, where the barcode databases hold packets.
    */
+  /* Searching by name, against the food list built into the app. No key,
+   * no connection, no waiting - the file downloads once and is cached.
+   */
   function searchOnline() {
     var box = $('pickResults');
+    var note = $('pickSearchNote');
     var query = $('pickSearch').value.trim();
-    var key = CalTrack.usda.keyFor(state.settings);
 
-    if (!query) {
+    if (query.length < 2) {
       box.innerHTML = '';
-      box.appendChild(emptyNote('Type what you ate first - "cheeseburger", ' +
-        '"general tso chicken", "caesar salad".'));
-      return;
-    }
-    if (!key) {
-      box.innerHTML = '';
-      box.appendChild(emptyNote('Searching by name needs a free USDA key. ' +
-        'Settings has a box for it, under "USDA lookups".'));
+      box.appendChild(emptyNote('Type what you ate first - "chicken nuggets", ' +
+        '"cheeseburger", "general tso chicken".'));
       return;
     }
 
     box.innerHTML = '';
-    box.appendChild(emptyNote('Searching for "' + query + '"...'));
+    box.appendChild(emptyNote(CalTrack.foodsearch.ready()
+      ? 'Searching...' : 'Fetching the food list, one moment...'));
 
-    CalTrack.usda.searchByName(query, key, 25).then(function (results) {
+    CalTrack.foodsearch.load().then(function () {
+      var results = CalTrack.foodsearch.search(query, 25);
       box.innerHTML = '';
+      note.hidden = true;
+
       if (!results.length) {
-        box.appendChild(emptyNote('Nothing found for "' + query + '". Try fewer ' +
-          'words, or the plain name of the dish.'));
+        box.appendChild(emptyNote('Nothing matching "' + query + '". Try fewer ' +
+          'words, or the plain name of the dish - "nuggets" rather than ' +
+          '"mcdonalds 10 piece".'));
         return;
       }
 
@@ -492,42 +495,34 @@
           '<span class="fi-sub"></span></span><span class="entry-kcal"></span>';
         btn.querySelector('.fi-name').textContent = r.name;
         btn.querySelector('.fi-sub').textContent =
-          (r.dataType === 'Survey (FNDDS)' ? 'prepared dish'
-            : r.dataType === 'Branded' ? (r.brand || 'packaged')
-            : 'basic ingredient');
-        btn.querySelector('.entry-kcal').textContent =
-          round(r.kcalPer100) + ' /100g';
-        btn.addEventListener('click', function () { pickSearchResult(r, key); });
+          r.isDish ? 'prepared dish' : 'basic ingredient';
+        btn.querySelector('.entry-kcal').textContent = round(r.kcalPer100) + ' /100g';
+        btn.addEventListener('click', function () { pickSearchResult(r); });
         box.appendChild(btn);
       });
+
+      note.hidden = false;
+      note.textContent = 'Searching ' + CalTrack.foodsearch.count().toLocaleString() +
+        ' foods from USDA, held inside the app. Packaged goods are not in here - ' +
+        'scan those.';
     }).catch(function (err) {
       box.innerHTML = '';
       box.appendChild(emptyNote(err.message));
     });
   }
 
-  // The search result carries enough for a list; the portions need the
-  // full record.
-  function pickSearchResult(result, key) {
-    var box = $('pickResults');
-    box.innerHTML = '';
-    box.appendChild(emptyNote('Fetching ' + result.name + '...'));
-
-    CalTrack.usda.byId(result.fdcId, key).then(function (draft) {
-      if (!draft || !draft.usable) {
-        box.innerHTML = '';
-        box.appendChild(emptyNote('That entry has no usable nutrition. Try another.'));
-        return;
-      }
-      $('pickSheet').hidden = true;
-      openFoodSheet(draft, {
-        asNew: true,
-        thenLog: state.pickSegment !== 'meals',
-        notes: draft.notes
-      });
-    }).catch(function (err) {
-      box.innerHTML = '';
-      box.appendChild(emptyNote(err.message));
+  function pickSearchResult(result) {
+    var draft = CalTrack.foodsearch.toDraft(result);
+    if (!draft.usable) {
+      $('pickResults').innerHTML = '';
+      $('pickResults').appendChild(emptyNote('That entry has no usable nutrition.'));
+      return;
+    }
+    $('pickSheet').hidden = true;
+    openFoodSheet(draft, {
+      asNew: true,
+      thenLog: state.pickSegment !== 'meals',
+      notes: draft.notes
     });
   }
 
