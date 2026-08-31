@@ -135,6 +135,45 @@ usda.searchByName('cheeseburger', null).catch(function (e) {
   ok('searching with no key explains itself', /needs a USDA key/.test(e.message));
 });
 
+// --- which portion becomes the unit you count in ------------------------
+/* Real data: USDA returns the nugget entries with the portions in opposite
+ * orders, so whichever arrived first used to become the unit. A cup of
+ * nuggets is a strange way to count nuggets.
+ */
+{
+  const ranked = usda._rankPortions([
+    { name: 'cup', grams: 140 },
+    { name: 'nugget', grams: 16 }
+  ]);
+  eq('the countable thing wins over the measure', ranked[0].name, 'nugget');
+  eq('and the measure is still there to pick', ranked[1].name, 'cup');
+}
+{
+  // The other entry lists them the other way round; same answer.
+  const ranked = usda._rankPortions([
+    { name: 'nugget', grams: 16 },
+    { name: 'cup', grams: 140 }
+  ]);
+  eq('order from the API does not decide it', ranked[0].name, 'nugget');
+}
+{
+  // Among countable things, the smallest is the one you multiply.
+  const ranked = usda._rankPortions([
+    { name: 'loaf', grams: 500 },
+    { name: 'slice', grams: 28 }
+  ]);
+  eq('a slice beats a loaf', ranked[0].name, 'slice');
+}
+
+ok('cup is a measure', usda._isMeasure('cup'));
+ok('so is tbsp', usda._isMeasure('tbsp'));
+ok('and fl oz', usda._isMeasure('fl oz'));
+ok('and the word serving itself', usda._isMeasure('serving'));
+ok('a nugget is not', !usda._isMeasure('nugget'));
+ok('nor a slice', !usda._isMeasure('slice'));
+ok('nor a cookie', !usda._isMeasure('cookie'));
+ok('nor a cheeseburger', !usda._isMeasure('cheeseburger'));
+
 // --- which key gets used ------------------------------------------------
 // The key comes from Settings and nowhere else - nothing is committed to
 // this repository. Nothing here touches the network; the suite runs offline.

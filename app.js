@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1455+9274ad1';
+  var BUILD = '2026-08-31.1506+f7f03f3';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;

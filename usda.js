@@ -254,6 +254,32 @@ CalTrack.usda = (function () {
     'Branded': 3            // packaged, which the scanner already covers
   };
 
+  /* Words that describe an amount rather than a thing.
+   *
+   * USDA returns portions in no useful order - chicken nuggets come back as
+   * "1 cup 140 g" then "1 nugget 16 g" on one entry and the reverse on
+   * another - so whichever landed first became the unit you logged in. A cup
+   * of nuggets is a strange way to count nuggets.
+   *
+   * So a countable thing wins over a measure of volume, and among countable
+   * things the smallest wins, since that is the one you can multiply. Pick
+   * "nugget" and ten of them is ten; pick "cup" and you are estimating.
+   */
+  var MEASURE_WORDS = /^(cup|cups|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|fl oz|floz|oz|ounce|ounces|ml|l|litre|liter|quart|pint|gallon|serving|servings|portion|portions|container|package|packet|bowl|plate|scoop)\b/i;
+
+  function isMeasure(name) {
+    return MEASURE_WORDS.test(String(name || '').trim());
+  }
+
+  function rankPortions(portions) {
+    return portions.slice().sort(function (a, b) {
+      var am = isMeasure(a.name) ? 1 : 0;
+      var bm = isMeasure(b.name) ? 1 : 0;
+      if (am !== bm) return am - bm;          // countable things first
+      return a.grams - b.grams;               // then the smallest of them
+    });
+  }
+
   function rank(dataType) {
     var r = TYPE_RANK[dataType];
     return (r === undefined) ? 9 : r;
@@ -344,6 +370,8 @@ CalTrack.usda = (function () {
         });
       });
 
+      portions = rankPortions(portions);
+
       var serving = portions.length
         ? { name: portions[0].name, grams: portions[0].grams, label: portions[0].name,
             macros: {
@@ -377,6 +405,8 @@ CalTrack.usda = (function () {
     SIGNUP_URL: SIGNUP_URL,
     searchByName: searchByName,
     _rankResults: rankResults,
+    _rankPortions: rankPortions,
+    _isMeasure: isMeasure,
     _shouldRetry: shouldRetry,
     byId: byId,
     keyFor: keyFor,
