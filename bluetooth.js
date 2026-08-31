@@ -166,6 +166,84 @@ CalTrack.ble = (function () {
     return out;
   }
 
+  /* ---------------------------------------------------------------------
+   * ICOMON / Lefu "ffb0" scales - the A-Scale X and its many rebadges.
+   *
+   * Captured from a real device (FI2019LB-B, firmware 1.0.4) on 31 Aug 2026.
+   * Twenty-byte frames, big-endian, on two characteristics:
+   *
+   *   ffb2 [notify]   type a2, the live reading while you are stepping on
+   *   ffb3 [indicate] type a3, the settled reading, sent once
+   *
+   *   byte 0     sequence counter, wraps ff -> 00
+   *   byte 3     frame type: a1 status, a2 live, a3 final
+   *   byte 4     (a2 only) settling state: 01 weighing, 02 stable,
+   *              04 measuring impedance
+   *   bytes 6-8  (a2) weight, 24-bit big-endian
+   *   bytes 5-7  (a3) weight, 24-bit big-endian - one earlier, since a2
+   *              carries the extra state byte
+   *   bytes 8-10 (a3) impedance, present ONLY when both feet are properly
+   *              on the electrodes. Absent readings come through as zeros.
+   *   byte 19    checksum, independent of the sequence byte
+   *
+   * The raw weight is always a multiple of 50, so the last unit is not
+   * meaningful - the divisor is what turns it into pounds, and that is
+   * confirmed against the scale's own display rather than assumed. See
+   * DEFAULT_DIVISOR.
+   */
+  var ICOMON_SERVICE = 0xFFB0;
+  var ICOMON_WRITE = 0xFFB1;
+  var ICOMON_LIVE = 0xFFB2;
+  var ICOMON_FINAL = 0xFFB3;
+
+  // raw / 500 = pounds, i.e. 0.1 lb per 50 raw units. Overridable, because
+  // a scale set to kilograms would need a different divisor and there is no
+  // flag in the frame that says which.
+  var DEFAULT_DIVISOR = 500;
+
+  function u24(view, offset) {
+    return (view.getUint8(offset) << 16) |
+           (view.getUint8(offset + 1) << 8) |
+            view.getUint8(offset + 2);
+  }
+
+  function parseIcomon(view, divisor) {
+    if (!view || view.byteLength < 20) return null;
+    divisor = divisor > 0 ? divisor : DEFAULT_DIVISOR;
+
+    var type = view.getUint8(3);
+
+    if (type === 0xA2) {
+      return {
+        kind: 'live',
+        state: view.getUint8(4),
+        raw: u24(view, 6),
+        weightLbs: u24(view, 6) / divisor
+      };
+    }
+
+    if (type === 0xA3) {
+      var raw = u24(view, 5);
+      var out = {
+        kind: 'final',
+        raw: raw,
+        weightLbs: raw / divisor,
+        impedanceBytes: [view.getUint8(8), view.getUint8(9), view.getUint8(10)]
+      };
+      // All three zero means the feet were not on the electrodes properly,
+      // so there is no body composition to be had from this reading.
+      out.hasImpedance = !!(out.impedanceBytes[0] || out.impedanceBytes[1] ||
+                            out.impedanceBytes[2]);
+      if (out.hasImpedance) {
+        // Big-endian, matching every other field in the frame.
+        out.impedance = (view.getUint8(9) << 8) | view.getUint8(10);
+      }
+      return out;
+    }
+
+    return { kind: 'status', type: type };
+  }
+
   // Whatever arrived, in the shape a weigh-in wants.
   function toReading(weight, composition) {
     var out = {};
@@ -205,10 +283,13 @@ CalTrack.ble = (function () {
 
     var request = opts.allDevices
       ? { acceptAllDevices: true,
-          optionalServices: [WEIGHT_SCALE_SERVICE, BODY_COMPOSITION_SERVICE] }
+          optionalServices: [WEIGHT_SCALE_SERVICE, BODY_COMPOSITION_SERVICE,
+                             ICOMON_SERVICE] }
       : { filters: [{ services: [WEIGHT_SCALE_SERVICE] },
-                    { services: [BODY_COMPOSITION_SERVICE] }],
-          optionalServices: [WEIGHT_SCALE_SERVICE, BODY_COMPOSITION_SERVICE] };
+                    { services: [BODY_COMPOSITION_SERVICE] },
+                    { services: [ICOMON_SERVICE] }],
+          optionalServices: [WEIGHT_SCALE_SERVICE, BODY_COMPOSITION_SERVICE,
+                             ICOMON_SERVICE] };
 
     var latestWeight = null;
     var latestComposition = null;
@@ -240,6 +321,26 @@ CalTrack.ble = (function () {
       return d.gatt.connect();
     }).then(function (server) {
       opts.onStatus('Connected. Looking for the standard services...');
+      /* The live characteristic is noisy - a packet every tenth of a second
+       * while you settle. Only the FINAL frame is worth reporting, so the
+       * live one just drives the status line.
+       */
+      function onIcomon(view) {
+        var r = parseIcomon(view, opts.divisor);
+        if (!r) return;
+        if (r.kind === 'live') {
+          opts.onStatus('Reading ' + r.weightLbs.toFixed(1) + ' lb' +
+            (r.state === 4 ? ' - measuring body composition, stay still...'
+                           : ' - hold still...'));
+          return;
+        }
+        if (r.kind !== 'final') return;
+        var reading = { weight_lbs: r.weightLbs, raw: r.raw };
+        if (r.hasImpedance) reading.impedance = r.impedance;
+        reading.footContact = r.hasImpedance;
+        opts.onReading(reading);
+      }
+
       return Promise.all([
         subscribe(server, WEIGHT_SCALE_SERVICE, WEIGHT_MEASUREMENT, function (view) {
           latestWeight = parseWeight(view);
@@ -248,7 +349,9 @@ CalTrack.ble = (function () {
         subscribe(server, BODY_COMPOSITION_SERVICE, BODY_COMPOSITION_MEASUREMENT, function (view) {
           latestComposition = parseBodyComposition(view);
           push();
-        })
+        }),
+        subscribe(server, ICOMON_SERVICE, ICOMON_LIVE, onIcomon),
+        subscribe(server, ICOMON_SERVICE, ICOMON_FINAL, onIcomon)
       ]);
     }).then(function (found) {
       var got = found.filter(Boolean);
@@ -379,6 +482,11 @@ CalTrack.ble = (function () {
   }
 
   return {
+    ICOMON_SERVICE: ICOMON_SERVICE,
+    ICOMON_LIVE: ICOMON_LIVE,
+    ICOMON_FINAL: ICOMON_FINAL,
+    DEFAULT_DIVISOR: DEFAULT_DIVISOR,
+    parseIcomon: parseIcomon,
     KNOWN_SERVICES: KNOWN_SERVICES,
     probe: probe,
     describe: describe,

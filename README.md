@@ -360,6 +360,28 @@ appear in a fixed order: read the order wrong and muscle mass silently comes
 back as body water. Writing those tests also turned up a crash on a truncated
 packet, which a real scale can send.
 
+**The ICOMON / Lefu `ffb0` protocol is implemented**, decoded from a real
+A-Scale X (ICOMON FI2019LB-B, firmware 1.0.4). Twenty-byte big-endian frames:
+`ffb2` notifies the live reading while you settle, `ffb3` indicates the final
+one. Weight is a **24-bit** value, at bytes 6-8 in live frames and 5-7 in
+final ones - the live frame carries an extra state byte that shifts
+everything along. That state byte runs `01` settling, `02` stable, `04`
+measuring composition.
+
+The final frame carries an **impedance** reading, but only when both bare
+feet are properly on the electrodes; a one-footed reading has zeros there and
+gets no body composition at all. Every one of those frames is in
+`test-bluetooth.js` as captured bytes, so the parser cannot drift.
+
+What the impedance can*not* do is become a body fat percentage. That number
+comes from the vendor's own proprietary formula, which is not in the protocol
+and which no amount of parsing recovers. The app reports the ohms and tells
+you to read the percentages off the scale's display.
+
+Nothing in the frame says whether the scale is set to pounds or kilograms, so
+the divisor is **calibrated, not assumed**: take one reading, type what the
+display said, and it works out the conversion and stores it.
+
 **"What does my scale offer?"** connects to any device you pick and prints
 every service and characteristic it exposes, with their properties. That
 turns "it did nothing" into a list of UUIDs, which is the difference between

@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1350+dab5696';
+  var BUILD = '2026-08-31.1408+9d40427';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -32,6 +32,7 @@
     refPer100: null,         // nutrition already known, from a scan or a save
     svTouched: false,        // has the user overridden the derived figures?
     svFromData: false,       // the serving weight came from a lookup, not a guess
+    lastScaleRaw: null,      // raw units from the last Bluetooth reading
     foodBasis: 'weight',     // 'volume' for drinks, so screens say ml not g
     dayTotal: 0,             // kcal already logged on the day being shown
     editingMealId: null,
@@ -2034,21 +2035,62 @@
 
     CalTrack.ble.connect({
       allDevices: !!allDevices,
+      divisor: state.settings.scale_divisor,
       onStatus: function (text) { clearMsg(msg); msg.textContent = text; },
       onReading: function (r) {
         if (r.weight_lbs) $('weightInput').value = round(r.weight_lbs, 1);
         if (r.body_fat_pct) $('bodyFatInput').value = round(r.body_fat_pct, 1);
         if (r.muscle_mass_lbs) $('muscleInput').value = round(r.muscle_mass_lbs, 1);
 
-        var got = [];
-        if (r.weight_lbs) got.push('weight');
-        if (r.body_fat_pct) got.push('body fat');
-        if (r.muscle_mass_lbs) got.push('muscle mass');
+        state.lastScaleRaw = r.raw || null;
+
+        var note = 'Read ' + round(r.weight_lbs, 1) + ' lb. Check it against the ' +
+          'display, then Save weight.';
+        if (r.footContact === false) {
+          note += ' No body-composition reading came with it - that needs both ' +
+            'bare feet flat on the metal.';
+        } else if (r.impedance) {
+          note += ' It measured ' + r.impedance + ' ohms, which is the body ' +
+            'composition reading, but only the scale knows the formula that ' +
+            'turns it into percentages - read those off its display.';
+        }
         clearMsg(msg);
-        msg.textContent = 'Read ' + got.join(', ') + '. Check it, then Save weight.';
+        msg.textContent = note;
+        $('bleCalibrate').hidden = !r.raw;
         if (navigator.vibrate) navigator.vibrate(60);
       },
       onError: function (err) { showError(msg, err.message); }
+    });
+  }
+
+  /* The scale sends raw counts, and nothing in the frame says whether it is
+   * set to pounds or kilograms. Rather than guess, take the number off the
+   * display once and work the divisor out from it. It is stored, so this
+   * only ever happens once.
+   */
+  function calibrateScale() {
+    var msg = $('bleMsg');
+    clearMsg(msg);
+    var shown = parseFloat($('bleShown').value);
+
+    if (!state.lastScaleRaw) {
+      showError(msg, 'Take a reading from the scale first.');
+      return;
+    }
+    if (!isFinite(shown) || shown <= 0) {
+      showError(msg, 'Type the weight your scale displayed, in pounds.');
+      return;
+    }
+
+    var divisor = state.lastScaleRaw / shown;
+    store.saveSettings({ scale_divisor: divisor }).then(function (s) {
+      state.settings = s;
+      $('weightInput').value = round(shown, 1);
+      $('bleCalibrate').hidden = true;
+      $('bleShown').value = '';
+      msg.textContent = 'Set. Readings from this scale will match its display ' +
+        'from now on.';
+      toast('Scale calibrated');
     });
   }
 
@@ -2576,6 +2618,7 @@
     $('bleAll').addEventListener('click',
       guarded(function () { connectScale(true); }, 'bleMsg'));
     $('bleProbe').addEventListener('click', guarded(probeScale, 'bleMsg'));
+    $('bleCalSave').addEventListener('click', guarded(calibrateScale, 'bleMsg'));
     $('weightInput').addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter') { ev.preventDefault(); saveWeighIn(); }
     });

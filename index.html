@@ -97,6 +97,13 @@
         <button id="bleProbe" class="btn wide">What does my scale offer?</button>
       </div>
       <p id="bleMsg" class="msg"></p>
+      <div id="bleCalibrate" hidden>
+        <label class="field"><span>Scale showed something different? Type what
+          it displayed, in pounds</span>
+          <input type="number" id="bleShown" inputmode="decimal" step="0.1"
+                 placeholder="e.g. 215.3"></label>
+        <button id="bleCalSave" class="btn">Use that instead</button>
+      </div>
       <pre id="bleReport" class="report" hidden></pre>
       <p class="hint">Need the raw bytes for someone to decode?
         <a href="scale-probe.html">Open the standalone scale probe</a> - it

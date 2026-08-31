@@ -152,6 +152,57 @@ eq('a runt composition packet', ble.parseBodyComposition(packet([[2, 0]])), null
 }
 eq('nothing in, nothing out', JSON.stringify(ble.toReading(null, null)), '{}');
 
+// --- the ICOMON / Lefu ffb0 frames --------------------------------------
+// Every packet below was captured from a real A-Scale X (ICOMON FI2019LB-B)
+// on 31 August 2026. If this parser ever drifts, these are the ground truth.
+function frame(hexString) {
+  return new DataView(new Uint8Array(
+    hexString.split(' ').map(h => parseInt(h, 16))).buffer);
+}
+
+{
+  // The good one: both feet down, so impedance came with it.
+  const r = ble.parseIcomon(frame(
+    '4f 08 00 a3 00 01 a4 82 60 01 8b 00 00 00 00 00 00 00 00 36'));
+  eq('a settled reading', r.kind, 'final');
+  eq('weight is 24-bit, not 16', r.raw, 0x01a482);
+  near('which is 215.3 lb at the default divisor', r.weightLbs, 215.3, 0.001);
+  ok('and it carried an impedance', r.hasImpedance);
+  eq('impedance, big-endian like the rest of the frame', r.impedance, 0x018b);
+}
+{
+  // One foot on: a weight, but no impedance, so no body composition.
+  const r = ble.parseIcomon(frame(
+    '4b 08 00 a3 00 00 6b 3a 00 00 00 00 00 00 00 00 00 00 00 28'));
+  eq('still a final reading', r.kind, 'final');
+  eq('raw', r.raw, 0x6b3a);
+  ok('but no impedance at all', !r.hasImpedance);
+  eq('and none is invented', r.impedance, undefined);
+}
+{
+  // Live frames put the weight one byte later, because of the state byte.
+  const r = ble.parseIcomon(frame(
+    '9c 07 00 a2 01 00 01 a5 18 00 00 00 00 00 00 00 00 00 00 21'));
+  eq('a live reading', r.kind, 'live');
+  eq('read from the right offset', r.raw, 0x01a518);
+  eq('state 1 while settling', r.state, 1);
+}
+eq('state 2 means stable', ble.parseIcomon(frame(
+  'd0 07 00 a2 02 00 01 a4 82 00 00 00 00 00 00 00 00 00 00 2b')).state, 2);
+eq('state 4 means it is measuring composition', ble.parseIcomon(frame(
+  'e6 07 00 a2 04 00 01 a4 82 00 00 00 00 00 00 00 00 00 00 2d')).state, 4);
+
+// The status frame sent at connect is neither, and must not be read as a weight.
+eq('a1 is a status frame', ble.parseIcomon(frame(
+  '4a 08 00 a1 00 71 1e 5a 00 07 05 00 00 00 00 00 00 00 00 36')).kind, 'status');
+
+// A scale set to kilograms needs a different divisor, and nothing in the
+// frame says which - so it is a parameter, never a guess.
+near('half the divisor doubles the reading', ble.parseIcomon(frame(
+  '4f 08 00 a3 00 01 a4 82 60 01 8b 00 00 00 00 00 00 00 00 36'), 250).weightLbs,
+  430.6, 0.001);
+eq('a short frame is refused', ble.parseIcomon(frame('4f 08 00 a3')), null);
+
 // --- errors have to be readable, not swallowed --------------------------
 ok('a missing device is explained',
   /not advertising anything/.test(ble.describe({ name: 'NotFoundError' }).message));

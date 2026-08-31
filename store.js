@@ -41,6 +41,7 @@ CalTrack.store = (function () {
     body_fat_pct: null,
     estimated_tdee: null,
     usda_api_key: null,       // the user's own key; never shipped in the repo
+    scale_divisor: null,      // raw scale units per pound; see bluetooth.js
     min_kcal: null            // overrides the default target floor
   };
 
