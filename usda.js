@@ -46,7 +46,22 @@ CalTrack.usda = (function () {
     return x !== '' && x === y;
   }
 
-  function fetchJson(url) {
+  /* USDA answers a plain 400 to perfectly valid requests, intermittently -
+   * measured at roughly one in five on identical URLs, with either space
+   * encoding. It is their server, not the query, so a failed request is
+   * retried rather than reported.
+   *
+   * Only transient statuses are retried. A 404 means the product genuinely
+   * is not there, and a 401 or 403 means the key is wrong - repeating either
+   * would just be slower.
+   */
+  var RETRY_STATUSES = [400, 500, 502, 503, 504];
+  // Failures cluster rather than arriving independently, so a couple of
+  // extra tries with a growing gap is worth more than a tighter loop.
+  var MAX_ATTEMPTS = 4;
+  var RETRY_DELAY_MS = 500;
+
+  function fetchOnce(url) {
     var controller = ('AbortController' in window) ? new AbortController() : null;
     var timer = setTimeout(function () { if (controller) controller.abort(); }, TIMEOUT_MS);
     return fetch(url, controller ? { signal: controller.signal } : {})
@@ -59,7 +74,11 @@ CalTrack.usda = (function () {
         if (res.status === 429) {
           throw new Error('USDA is rate-limiting your key. Try again in a little while.');
         }
-        if (!res.ok) throw new Error('USDA answered with an error (' + res.status + ').');
+        if (!res.ok) {
+          var err = new Error('USDA answered with an error (' + res.status + ').');
+          err.status = res.status;
+          throw err;
+        }
         return res.json().catch(function () {
           throw new Error('USDA sent something that was not JSON.');
         });
@@ -70,6 +89,17 @@ CalTrack.usda = (function () {
         if (e instanceof TypeError) throw new Error('Could not reach USDA. Are you online?');
         throw e;
       });
+  }
+
+  function fetchJson(url, attempt) {
+    attempt = attempt || 1;
+    return fetchOnce(url).catch(function (e) {
+      var worthRetrying = e && RETRY_STATUSES.indexOf(e.status) !== -1;
+      if (!worthRetrying || attempt >= MAX_ATTEMPTS) throw e;
+      return new Promise(function (resolve) {
+        setTimeout(resolve, RETRY_DELAY_MS * attempt);
+      }).then(function () { return fetchJson(url, attempt + 1); });
+    });
   }
 
   // "31.0 g" / "240 ml" / the older GRM and MLT unit codes.
@@ -192,8 +222,163 @@ CalTrack.usda = (function () {
     });
   }
 
+  /* Searching by name, for everything that has no barcode: a takeaway, a
+   * plate in a restaurant, a raw ingredient.
+   *
+   * The dataset order matters. Survey (FNDDS) is the one built for asking
+   * people what they ate, so it holds "Cheeseburger (McDonalds)" and
+   * "General Tso chicken" as whole dishes. Foundation and SR Legacy carry
+   * raw ingredients. Branded is packaged goods, which the barcode scanner
+   * already covers, so it comes last.
+   */
+  /* Three datasets, not four: the API answers a 400 to a fourth dataType
+   * parameter. Foundation is the one dropped - it holds a few hundred items
+   * where SR Legacy holds thousands of the same kind, so it costs almost
+   * nothing.
+   */
+  var SEARCH_TYPES = 'Survey (FNDDS),SR Legacy,Branded';
+
+  // Nutrient numbers, which are stable where the names are not.
+  var N_KCAL = '208', N_PROTEIN = '203', N_CARBS = '205', N_FAT = '204';
+
+  /* USDA ranks purely on text relevance, so a search for "cheeseburger"
+   * comes back as twenty frozen supermarket burgers and buries the one
+   * that means a cheeseburger from a shop. Worse, Branded entries carry no
+   * household portions at all, which is the whole reason to search by name.
+   * So results are re-sorted by dataset, relevance order kept within each.
+   */
+  var TYPE_RANK = {
+    'Survey (FNDDS)': 0,    // whole dishes, takeaways, restaurant food
+    'Foundation': 1,        // not requested, but rank it if it ever appears
+    'SR Legacy': 2,         // raw and generic ingredients
+    'Branded': 3            // packaged, which the scanner already covers
+  };
+
+  function rank(dataType) {
+    var r = TYPE_RANK[dataType];
+    return (r === undefined) ? 9 : r;
+  }
+
+  function rankResults(rows) {
+    return rows.slice().sort(function (a, b) {
+      return rank(a.dataType) - rank(b.dataType);
+    });
+  }
+
+  function shouldRetry(status) {
+    return RETRY_STATUSES.indexOf(status) !== -1;
+  }
+
+  function searchByName(query, apiKey, limit) {
+    if (!apiKey) return Promise.reject(new Error(
+      'Searching by name needs a USDA key. Settings has a box for one, and ' +
+      'they are free from ' + SIGNUP_URL));
+    if (!String(query || '').trim()) return Promise.resolve([]);
+
+    var url = SEARCH + '?query=' + encodeURIComponent(query) +
+      /* One dataType parameter per dataset. FDC answers a 400 to a
+       * comma-separated list, whether the commas are encoded or not - it
+       * only takes the parameter repeated.
+       */
+      SEARCH_TYPES.split(',').map(function (t) {
+        return '&dataType=' + encodeURIComponent(t);
+      }).join('') +
+      '&pageSize=' + (limit || 20) +
+      '&api_key=' + encodeURIComponent(apiKey);
+
+    return fetchJson(url).then(function (data) {
+      return ((data && data.foods) || []).map(function (f) {
+        var by = {};
+        (f.foodNutrients || []).forEach(function (n) {
+          if (n.nutrientNumber) by[String(n.nutrientNumber)] = n.value;
+        });
+        return {
+          fdcId: f.fdcId,
+          name: tidy(f.description),
+          brand: tidy(f.brandName || f.brandOwner),
+          dataType: f.dataType,
+          kcalPer100: num(by[N_KCAL])
+        };
+      }).filter(function (r) { return r.kcalPer100 > 0; })
+        .sort(function (a, b) { return rank(a.dataType) - rank(b.dataType); });
+    });
+  }
+
+  /* One result, in full. The search response carries enough for a list, but
+   * not the household portions - "1 cheeseburger, 110 g" - which are the
+   * whole point for food you did not weigh.
+   */
+  function byId(fdcId, apiKey) {
+    return fetchJson(DETAIL + encodeURIComponent(fdcId) +
+      '?api_key=' + encodeURIComponent(apiKey)).then(function (f) {
+      if (!f) return null;
+
+      var by = {};
+      (f.foodNutrients || []).forEach(function (n) {
+        var number = n.nutrient && n.nutrient.number;
+        var unit = n.nutrient && n.nutrient.unitName;
+        // Energy appears twice, as kilocalories and kilojoules.
+        if (number === N_KCAL && unit && unit.toUpperCase() !== 'KCAL') return;
+        if (number) by[String(number)] = n.amount;
+      });
+
+      var per100 = {
+        kcal: num(by[N_KCAL]),
+        protein: num(by[N_PROTEIN]),
+        carbs: num(by[N_CARBS]),
+        fat: num(by[N_FAT])
+      };
+
+      var portions = [];
+      (f.foodPortions || []).forEach(function (p) {
+        var grams = num(p.gramWeight);
+        var label = String(p.portionDescription || p.modifier || '').trim();
+        if (!(grams > 0) || !label) return;
+        // FNDDS pads its list with this; it names no portion at all.
+        if (/quantity not specified/i.test(label)) return;
+        // "1 cheeseburger" is one of a thing, so the thing is the portion.
+        var single = label.match(/^1\s+(.+)$/);
+        portions.push({
+          name: (single ? single[1] : label).toLowerCase().slice(0, 30),
+          grams: grams
+        });
+      });
+
+      var serving = portions.length
+        ? { name: portions[0].name, grams: portions[0].grams, label: portions[0].name,
+            macros: {
+              kcal: per100.kcal * portions[0].grams / 100,
+              protein: per100.protein * portions[0].grams / 100,
+              carbs: per100.carbs * portions[0].grams / 100,
+              fat: per100.fat * portions[0].grams / 100
+            } }
+        : null;
+
+      var notes = ['From USDA, searched by name rather than scanned. Check it ' +
+        'against what you actually ate - a restaurant portion is whatever they ' +
+        'served you, not what the database averaged.'];
+
+      return {
+        barcode: null,
+        name: tidy(f.description),
+        brand: tidy(f.brandName || f.brandOwner),
+        per_100g: per100,
+        portions: portions.slice(0, 4),
+        source: 'usda',
+        basis: 'weight',
+        serving: serving,
+        notes: notes,
+        usable: per100.kcal > 0
+      };
+    });
+  }
+
   return {
     SIGNUP_URL: SIGNUP_URL,
+    searchByName: searchByName,
+    _rankResults: rankResults,
+    _shouldRetry: shouldRetry,
+    byId: byId,
     keyFor: keyFor,
     lookup: lookup,
     _draftFrom: draftFrom,

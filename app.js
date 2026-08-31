@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1445+3c1986d';
+  var BUILD = '2026-08-31.1455+9274ad1';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -364,6 +364,7 @@
     });
     $('pickSearch').placeholder = (which === 'meals') ? 'Search meals' : 'Search food';
     $('pickScanBtn').hidden = (which === 'meals');
+    $('pickSearchOnline').hidden = (which === 'meals');
     $('pickNewFood').textContent = (which === 'meals')
       ? 'Build a new meal' : "Add a food that isn't here yet";
     renderPickResults();
@@ -447,6 +448,86 @@
           openMealLogSheet(m);
         }));
       });
+    });
+  }
+
+  /* Searching the databases by name, for everything with no barcode: a
+   * takeaway, a restaurant plate, a raw ingredient. USDA's Survey dataset
+   * is built for exactly this - it holds whole dishes with household
+   * portions, where the barcode databases hold packets.
+   */
+  function searchOnline() {
+    var box = $('pickResults');
+    var query = $('pickSearch').value.trim();
+    var key = CalTrack.usda.keyFor(state.settings);
+
+    if (!query) {
+      box.innerHTML = '';
+      box.appendChild(emptyNote('Type what you ate first - "cheeseburger", ' +
+        '"general tso chicken", "caesar salad".'));
+      return;
+    }
+    if (!key) {
+      box.innerHTML = '';
+      box.appendChild(emptyNote('Searching by name needs a free USDA key. ' +
+        'Settings has a box for it, under "USDA lookups".'));
+      return;
+    }
+
+    box.innerHTML = '';
+    box.appendChild(emptyNote('Searching for "' + query + '"...'));
+
+    CalTrack.usda.searchByName(query, key, 25).then(function (results) {
+      box.innerHTML = '';
+      if (!results.length) {
+        box.appendChild(emptyNote('Nothing found for "' + query + '". Try fewer ' +
+          'words, or the plain name of the dish.'));
+        return;
+      }
+
+      results.forEach(function (r) {
+        var btn = document.createElement('button');
+        btn.className = 'fooditem';
+        btn.innerHTML = '<span class="fi-main"><span class="fi-name"></span>' +
+          '<span class="fi-sub"></span></span><span class="entry-kcal"></span>';
+        btn.querySelector('.fi-name').textContent = r.name;
+        btn.querySelector('.fi-sub').textContent =
+          (r.dataType === 'Survey (FNDDS)' ? 'prepared dish'
+            : r.dataType === 'Branded' ? (r.brand || 'packaged')
+            : 'basic ingredient');
+        btn.querySelector('.entry-kcal').textContent =
+          round(r.kcalPer100) + ' /100g';
+        btn.addEventListener('click', function () { pickSearchResult(r, key); });
+        box.appendChild(btn);
+      });
+    }).catch(function (err) {
+      box.innerHTML = '';
+      box.appendChild(emptyNote(err.message));
+    });
+  }
+
+  // The search result carries enough for a list; the portions need the
+  // full record.
+  function pickSearchResult(result, key) {
+    var box = $('pickResults');
+    box.innerHTML = '';
+    box.appendChild(emptyNote('Fetching ' + result.name + '...'));
+
+    CalTrack.usda.byId(result.fdcId, key).then(function (draft) {
+      if (!draft || !draft.usable) {
+        box.innerHTML = '';
+        box.appendChild(emptyNote('That entry has no usable nutrition. Try another.'));
+        return;
+      }
+      $('pickSheet').hidden = true;
+      openFoodSheet(draft, {
+        asNew: true,
+        thenLog: state.pickSegment !== 'meals',
+        notes: draft.notes
+      });
+    }).catch(function (err) {
+      box.innerHTML = '';
+      box.appendChild(emptyNote(err.message));
     });
   }
 
@@ -2545,6 +2626,7 @@
       if (state.pickSegment === 'meals') openMealSheet(null); else openFoodSheet(null);
     });
 
+    $('pickSearchOnline').addEventListener('click', searchOnline);
     $('pickScanBtn').addEventListener('click', function () {
       $('pickSheet').hidden = true;
       openScanSheet('log');

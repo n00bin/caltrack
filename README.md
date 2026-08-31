@@ -24,6 +24,12 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   and a number for something you've eaten before. Before you commit it tells
   you what it would leave you for the day, so you can decide on the spot
   whether it fits.
+- **Searching by name** — for the things with no barcode: a takeaway, a
+  restaurant plate, a raw ingredient. Tap **Search all foods** in the log
+  sheet. It queries USDA's Survey dataset, which is built for asking people
+  what they ate, so "cheeseburger" finds *Cheeseburger (McDonalds)* at
+  110 g rather than twenty frozen supermarket burgers. Needs the free USDA
+  key in Settings.
 - **Scanning** — the Scan button. Point it at a barcode and one of three
   things happens: it's already one of your foods and you go straight to the
   amount box; it's in Open Food Facts and you get a filled-in form to check;

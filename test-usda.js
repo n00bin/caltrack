@@ -106,6 +106,35 @@ ok('different codes do not match', !usda._sameCode('842798105464', '842798105465
 ok('empty matches nothing', !usda._sameCode('', ''));
 ok('null matches nothing', !usda._sameCode(null, '123'));
 
+// --- searching by name --------------------------------------------------
+// Results are re-sorted by dataset, because USDA ranks on text relevance
+// alone and buries the prepared dishes under supermarket packets - and
+// Branded entries carry no household portions, which is the whole point.
+{
+  const sorted = usda._rankResults([
+    { name: 'a', dataType: 'Branded' },
+    { name: 'b', dataType: 'Survey (FNDDS)' },
+    { name: 'c', dataType: 'SR Legacy' },
+    { name: 'd', dataType: 'Survey (FNDDS)' }
+  ]);
+  eq('prepared dishes come first', sorted[0].dataType, 'Survey (FNDDS)');
+  eq('and stay in the order the API gave them', sorted[0].name + sorted[1].name, 'bd');
+  eq('raw ingredients next', sorted[2].dataType, 'SR Legacy');
+  eq('packets last, since the scanner covers those', sorted[3].dataType, 'Branded');
+}
+
+// A transient 400 must be retried, a real 404 must not.
+ok('400 is retried', usda._shouldRetry(400));
+ok('and 503', usda._shouldRetry(503));
+ok('404 is not - the food is simply absent', !usda._shouldRetry(404));
+ok('nor 403 - repeating a bad key is just slower', !usda._shouldRetry(403));
+ok('nor 429', !usda._shouldRetry(429));
+
+// Without a key, say so rather than failing obscurely.
+usda.searchByName('cheeseburger', null).catch(function (e) {
+  ok('searching with no key explains itself', /needs a USDA key/.test(e.message));
+});
+
 // --- which key gets used ------------------------------------------------
 // The key comes from Settings and nowhere else - nothing is committed to
 // this repository. Nothing here touches the network; the suite runs offline.
