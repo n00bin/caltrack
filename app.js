@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1419+4e5c027';
+  var BUILD = '2026-08-31.1423+085bfd1';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1423,7 +1423,14 @@
           round(goal, 1) + ' lb would put you.'
                  : ' Set a goal weight and it will be marked on here too.')));
     } else if (current) {
-      box.appendChild(hintP('Put your height into Settings and BMI appears here.'));
+      box.appendChild(hintP('BMI needs your height. Put it in Settings, under ' +
+        'Daily target, and it appears here.'));
+    } else if (height > 0) {
+      box.appendChild(hintP('BMI needs a weigh-in. Add one above and it appears ' +
+        'here.'));
+    } else {
+      box.appendChild(hintP('BMI needs two things: your height, in Settings ' +
+        'under Daily target, and at least one weigh-in above.'));
     }
 
     // --- composition ---
@@ -2225,6 +2232,13 @@
     $('setTargetKcal').value = state.settings.target_kcal || '';
     $('setGoalWeight').value = state.settings.goal_weight_lbs || '';
     $('setTargetRate').value = state.settings.target_rate_lbs_per_week || '';
+    if (state.settings.height_in > 0) {
+      $('setFeet').value = Math.floor(state.settings.height_in / 12);
+      $('setInches').value = Math.round(state.settings.height_in % 12);
+    } else {
+      $('setFeet').value = '';
+      $('setInches').value = '';
+    }
     $('usdaKey').value = state.settings.usda_api_key || '';
     clearMsg($('usdaMsg'));
     clearMsg($('settingsMsg'));
@@ -2387,10 +2401,16 @@
     var target = parseFloat($('setTargetKcal').value);
     var goal = parseFloat($('setGoalWeight').value);
     var rate = parseFloat($('setTargetRate').value);
+
+    var feet = parseFloat($('setFeet').value) || 0;
+    var inches = parseFloat($('setInches').value) || 0;
+    var heightIn = (feet * 12) + inches;
+
     store.saveSettings({
       target_kcal: isFinite(target) && target > 0 ? target : null,
       goal_weight_lbs: isFinite(goal) && goal > 0 ? goal : null,
-      target_rate_lbs_per_week: isFinite(rate) && rate > 0 ? rate : null
+      target_rate_lbs_per_week: isFinite(rate) && rate > 0 ? rate : null,
+      height_in: heightIn > 0 ? heightIn : state.settings.height_in
     }).then(function (s) {
       state.settings = s;
       $('settingsMsg').textContent = 'Saved.';
