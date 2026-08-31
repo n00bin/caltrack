@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1443+1cfd3a4';
+  var BUILD = '2026-08-31.1445+3c1986d';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1530,7 +1530,10 @@
       var t = document.createElement('div');
       t.className = 'bmimark target';
       t.style.left = T.bmiPercent(target.bmi) + '%';
-      t.innerHTML = '<b>' + round(target.weight) + ' lb</b>healthy';
+      // BMI, to match the "you" mark - the bar is a BMI scale, so putting
+      // pounds on it made the two marks read in different units. The weight
+      // is in the sentence underneath, where it belongs.
+      t.innerHTML = '<b>' + round(target.bmi, 1) + '</b>healthy';
       // Two labels on the same spot would overlap illegibly.
       if (Math.abs(T.bmiPercent(target.bmi) - T.bmiPercent(current)) < 12) {
         t.style.top = '17px';
