@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1430+df8624e';
+  var BUILD = '2026-08-31.1436+282fc34';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -2217,7 +2217,15 @@
         })
       : Promise.resolve();
 
-    var reloadNow = function () { location.reload(); };
+    /* A plain reload can still take app.js from the browser's HTTP cache,
+     * which is what made this button unreliable. A one-off query string
+     * cannot be served from it, so the next load is guaranteed fresh.
+     */
+    var reloadNow = function () {
+      var url = location.href.split('#')[0].replace(/[?&]fresh=\d+/, '');
+      location.href = url + (url.indexOf('?') === -1 ? '?' : '&') +
+        'fresh=' + Date.now();
+    };
 
     wipe.then(function () {
       if (!('serviceWorker' in navigator)) return null;

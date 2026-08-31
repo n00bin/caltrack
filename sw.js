@@ -11,12 +11,19 @@
  * A slow connection is worse than no connection, so the network only gets
  * three seconds before the cached copy is served instead.
  *
+ * IMPORTANT: every fetch here is `cache: 'no-store'`. GitHub Pages serves
+ * these files with `Cache-Control: max-age=600`, and a plain fetch() honours
+ * the browser's own HTTP cache - so "network first" was really "up to ten
+ * minutes stale first", and pushed fixes appeared not to arrive. The worker
+ * keeps its own copy for offline use; it does not want a second, invisible
+ * one underneath it.
+ *
  * Anything NOT on this origin - Open Food Facts, the ZXing library - is left
  * alone entirely. Barcode lookups need the real network and should fail
  * honestly rather than quietly serving yesterday's answer.
  */
 
-const VERSION = 'caltrack-2026-08-31.1430+df8624e';
+const VERSION = 'caltrack-2026-08-31.1436+282fc34';
 const TIMEOUT_MS = 3000;
 
 const SHELL = [
@@ -39,7 +46,7 @@ const SHELL = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
-      .then((cache) => cache.addAll(SHELL))
+      .then((cache) => cache.addAll(SHELL.map(fresh)))
       // A missing file must not wedge the install; the app still works online.
       .catch((err) => console.warn('[sw] precache incomplete', err))
       .then(() => self.skipWaiting())
@@ -55,6 +62,18 @@ self.addEventListener('activate', (event) => {
       .then(() => self.clients.claim())
   );
 });
+
+/* A request that genuinely goes to the network, bypassing the browser's
+ * HTTP cache. Only ever used for our own files.
+ */
+function fresh(input) {
+  const url = (typeof input === 'string') ? input : input.url;
+  try {
+    return new Request(url, { cache: 'no-store', credentials: 'same-origin' });
+  } catch (err) {
+    return input;   // very old browsers: better stale than broken
+  }
+}
 
 function putInCache(request, response) {
   // Opaque and error responses are not worth keeping.
@@ -78,7 +97,7 @@ function networkFirst(request) {
       caches.match(request).then((cached) => { if (cached) finish(cached); });
     }, TIMEOUT_MS);
 
-    fetch(request).then((response) => {
+    fetch(fresh(request)).then((response) => {
       clearTimeout(timer);
       putInCache(request, response);
       finish(response);

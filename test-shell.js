@@ -79,6 +79,16 @@ ok('app.js carries the same stamp', build && version.indexOf(build) !== -1,
   'BUILD=' + JSON.stringify(build) + ' VERSION=' + JSON.stringify(version));
 ok('the build id is shown to the user', /id="buildId"/.test(html));
 
+/* GitHub Pages sends Cache-Control: max-age=600, and a plain fetch() obeys
+ * the browser's HTTP cache - so a "network first" worker can still serve a
+ * ten-minute-old file and look like it deployed nothing. Every fetch has to
+ * opt out explicitly.
+ */
+ok('the worker bypasses the browser HTTP cache', /cache: 'no-store'/.test(sw));
+ok('and does it on the live fetch, not just in a comment',
+  /fetch\(fresh\(request\)\)/.test(sw));
+ok('the precache bypasses it too', /SHELL\.map\(fresh\)/.test(sw));
+
 // The service worker must not touch other people's servers.
 ok('the worker leaves other origins alone',
   /url\.origin !== self\.location\.origin/.test(sw));
