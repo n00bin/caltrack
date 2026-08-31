@@ -54,6 +54,10 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
 - **What you actually burn** — your TDEE, backed out of what really happened
   rather than predicted from a formula, with an honest label on it: *not yet
   reliable*, *early estimate*, or *measured*.
+- **Getting to your goal** — a date, worked out from the trend you are
+  actually on rather than the one you meant to be on, with the planned-rate
+  date beside it for comparison. Flat or going the wrong way gives no date and
+  says why, instead of a number that means nothing.
 - **Plateau detection** — compares the loss your logged deficit predicts
   against the loss the scale actually shows, and raises a tiered, honestly
   worded alert. If it's confident, it offers two levers — eat less, or move
@@ -224,6 +228,13 @@ measurement, a measurement beats the formula, the formula beats nothing.
 There's a test asserting exactly that order. Once the measured figure is
 trustworthy, the Trend screen says how far off the estimate was and replaces
 it.
+
+**About the goal date.** It extends a straight line, and weight loss is not
+one: as you get lighter you burn less, so the same food is a smaller deficit
+and the line bends. A projection is therefore optimistic by construction, and
+more so the further out it reaches. The app says that under the date rather
+than presenting an extrapolation as a delivery date — and the plateau
+detection below exists precisely because that bend is real.
 
 **Things it refuses to do:**
 

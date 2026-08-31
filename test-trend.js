@@ -372,6 +372,72 @@ ok('an empty profile is an error', !!T.estimateTdee({}).error);
   eq('and one shared floor', viaAdjustment.floor, viaTarget.floor);
 }
 
+// ------------------------------------------------- when is the goal due
+{
+  // 220 lb falling a pound a week, goal 200. Twenty pounds, twenty weeks.
+  const run = makeRun({ days: 28, intake: 2000, startWeight: 220, lbsPerDay: 1 / 7 });
+  const g = T.projectGoal({
+    weighIns: run.weighIns, asOf: run.asOf,
+    settings: { goal_weight_lbs: 200, target_rate_lbs_per_week: 1 }
+  });
+  near('current weight is the smoothed one, not this morning', g.current, 218.6, 1.5);
+  near('rate matches the trend', g.ratePerWeek, 1, 0.05);
+  ok('an arrival date exists', !!g.date);
+  near('about as many weeks as pounds at a pound a week', g.weeks, g.toGo, 0.6);
+  eq('a full clean window is trusted', g.confidence, 'ok');
+  ok('the planned date is offered too', !!g.planned.date);
+}
+
+// Flat: no date, and it says why rather than showing infinity.
+{
+  const run = makeRun({ days: 28, intake: 2000, startWeight: 220, lbsPerDay: 0 });
+  const g = T.projectGoal({ weighIns: run.weighIns, asOf: run.asOf,
+    settings: { goal_weight_lbs: 200 } });
+  eq('no date when flat', g.date, null);
+  ok('and it explains', /flat/.test(g.reason));
+  near('but it still says how far there is to go', g.toGo, 20, 1.5);
+}
+
+// Going the wrong way.
+{
+  const run = makeRun({ days: 28, intake: 3000, startWeight: 220, lbsPerDay: -1 / 7 });
+  const g = T.projectGoal({ weighIns: run.weighIns, asOf: run.asOf,
+    settings: { goal_weight_lbs: 200 } });
+  eq('no date when gaining', g.date, null);
+  ok('and it says so plainly', /moving away/.test(g.reason));
+}
+
+// Already there.
+{
+  const run = makeRun({ days: 28, intake: 2000, startWeight: 200.2, lbsPerDay: 0 });
+  const g = T.projectGoal({ weighIns: run.weighIns, asOf: run.asOf,
+    settings: { goal_weight_lbs: 200 } });
+  ok('arriving is recognised', /You are there/.test(g.reason));
+}
+
+// Goal ABOVE current weight - gaining towards it counts as progress.
+{
+  const run = makeRun({ days: 28, intake: 3000, startWeight: 140, lbsPerDay: -1 / 7 });
+  const g = T.projectGoal({ weighIns: run.weighIns, asOf: run.asOf,
+    settings: { goal_weight_lbs: 160 } });
+  ok('gaining towards a higher goal gives a date', !!g.date);
+  ok('and the gap is negative', g.toGo < 0);
+}
+
+// Not enough behind it yet.
+{
+  const run = makeRun({ days: 8, intake: 2000, startWeight: 220, lbsPerDay: 1 / 7 });
+  const g = T.projectGoal({ weighIns: run.weighIns, asOf: run.asOf,
+    settings: { goal_weight_lbs: 200 } });
+  eq('eight days is not enough to trust a date', g.confidence, 'none');
+  ok('though a date is still offered, labelled', !!g.date);
+}
+
+eq('no goal, no projection',
+  T.projectGoal({ weighIns: [], settings: {} }).goal, null);
+ok('no weigh-ins says so',
+  /couple of weigh-ins/.test(T.projectGoal({ weighIns: [], settings: { goal_weight_lbs: 200 } }).reason));
+
 // ------------------------------------------------------------ plumbing
 
 {

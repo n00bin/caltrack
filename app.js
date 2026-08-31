@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-30.1836+e323a83';
+  var BUILD = '2026-08-31.1304+67d4207';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1328,6 +1328,10 @@
       });
       renderTdee(measured);
 
+      renderGoal(T.projectGoal({
+        weighIns: weighIns, settings: state.settings, asOf: localDate(new Date())
+      }));
+
       var p = T.plateau({
         entries: entries, weighIns: weighIns,
         settings: state.settings, measured: measured,
@@ -1383,6 +1387,68 @@
           '. This measured figure replaces it.';
       box.appendChild(handover);
     }
+  }
+
+  function renderGoal(g) {
+    var box = $('goalBody');
+    box.innerHTML = '';
+
+    if (!g.goal) {
+      box.appendChild(emptyNote('Set a goal weight in Settings and this works ' +
+        'out when you would get there.'));
+      return;
+    }
+
+    if (g.reason === 'You are there.') {
+      var done = document.createElement('div');
+      done.className = 'bignum';
+      done.innerHTML = '<b>Done</b>';
+      box.appendChild(done);
+      box.appendChild(hintP('You are at your goal of ' + round(g.goal, 1) + ' lb.'));
+      return;
+    }
+
+    if (!g.current) {
+      box.appendChild(emptyNote(g.reason));
+      return;
+    }
+
+    if (g.date) {
+      var big = document.createElement('div');
+      big.className = 'bignum';
+      big.innerHTML = '<b>' + prettyDate(g.date) + '</b>';
+      box.appendChild(big);
+
+      var badge = document.createElement('span');
+      badge.className = 'badge badge-' + g.confidence;
+      badge.textContent = g.confidence === 'ok' ? 'on current trend'
+        : g.confidence === 'low' ? 'early estimate' : 'not enough data yet';
+      box.appendChild(badge);
+
+      box.appendChild(hintP(
+        Math.abs(round(g.toGo, 1)) + ' lb to go at ' + round(g.ratePerWeek, 2) +
+        ' lb a week - about ' + Math.round(g.weeks) + ' week' +
+        (Math.round(g.weeks) === 1 ? '' : 's') + '.'));
+    } else {
+      box.appendChild(hintP(g.reason + ' ' + Math.abs(round(g.toGo, 1)) +
+        ' lb still to go.'));
+    }
+
+    if (g.planned) {
+      box.appendChild(hintP('At your target of ' + g.planned.ratePerWeek +
+        ' lb a week it would be ' + prettyDate(g.planned.date) + '.'));
+    }
+
+    box.appendChild(hintP('Both assume the rate holds, and it will not: as you ' +
+      'get lighter you burn less, so the same food becomes a smaller deficit ' +
+      'and the line bends. Treat a far-off date as the optimistic end.'));
+  }
+
+  function hintP(text) {
+    var p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = text;
+    return p;
   }
 
   function renderPlateau(p, measured) {

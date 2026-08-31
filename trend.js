@@ -497,6 +497,100 @@ CalTrack.trend = (function () {
     };
   }
 
+  /* When will the goal weight arrive?
+   *
+   * Two answers, because they are different questions. The MEASURED one
+   * extends the trend line you are actually on. The PLANNED one is what the
+   * rate in Settings would give if you hit it every week.
+   *
+   * Both assume a straight line, and weight loss is not one: as you get
+   * lighter you burn less, so the same food is a smaller deficit and the
+   * line bends. A projection is therefore optimistic by construction, and
+   * further out it is more optimistic. The app says so rather than dressing
+   * a linear extrapolation up as a delivery date - and its own plateau
+   * detection exists precisely because that bend is real.
+   */
+  function projectGoal(opts) {
+    var settings = opts.settings || {};
+    var goal = Number(settings.goal_weight_lbs);
+
+    var base = {
+      goal: goal > 0 ? goal : null,
+      current: null, toGo: null,
+      ratePerWeek: null, weeks: null, date: null,
+      planned: null, confidence: 'none', reason: ''
+    };
+
+    if (!(goal > 0)) {
+      base.reason = 'No goal weight set.';
+      return base;
+    }
+
+    var smoothed = emaSeries(opts.weighIns);
+    if (smoothed.length < 2) {
+      base.reason = 'Needs a couple of weigh-ins first.';
+      return base;
+    }
+
+    var asOf = opts.asOf || smoothed[smoothed.length - 1].date;
+    var toDay = dayNumber(asOf);
+    var windowDays = opts.windowDays || DEFAULT_WINDOW;
+    var win = inWindow(smoothed, toDay - windowDays + 1, toDay);
+    if (win.length < 2) {
+      base.reason = 'No recent weigh-ins to draw a line through.';
+      return base;
+    }
+
+    // The smoothed figure, not this morning's reading.
+    var current = win[win.length - 1].ema;
+    base.current = current;
+    base.toGo = current - goal;
+
+    if (Math.abs(base.toGo) < 0.5) {
+      base.reason = 'You are there.';
+      base.confidence = 'ok';
+      return base;
+    }
+
+    // Positive when moving towards the goal, whichever side of it you start.
+    var slope = slopeLbsPerWeek(win, 'raw');
+    var towards = base.toGo > 0 ? -slope : slope;
+    base.ratePerWeek = Math.abs(slope);
+
+    var days = dayNumber(win[win.length - 1].date) - dayNumber(win[0].date);
+    if (days < MIN_DAYS_FOR_TDEE || win.length < MIN_WEIGH_INS) {
+      base.confidence = 'none';
+    } else if (days < 21) {
+      base.confidence = 'low';
+    } else {
+      base.confidence = 'ok';
+    }
+
+    if (towards > 0.05) {
+      var weeks = Math.abs(base.toGo) / towards;
+      base.weeks = weeks;
+      base.date = dateFromDay(toDay + Math.round(weeks * 7));
+      base.reason = 'At the rate you are actually going.';
+    } else {
+      base.reason = towards < -0.05
+        ? 'You are moving away from the goal, so there is no arrival date.'
+        : 'The trend is flat, so there is no arrival date at this rate.';
+    }
+
+    // What the plan says, for comparison.
+    var planned = Number(settings.target_rate_lbs_per_week);
+    if (planned > 0) {
+      var plannedWeeks = Math.abs(base.toGo) / planned;
+      base.planned = {
+        ratePerWeek: planned,
+        weeks: plannedWeeks,
+        date: dateFromDay(toDay + Math.round(plannedWeeks * 7))
+      };
+    }
+
+    return base;
+  }
+
   return {
     KCAL_PER_LB: KCAL_PER_LB,
     EMA_ALPHA: EMA_ALPHA,
@@ -512,6 +606,7 @@ CalTrack.trend = (function () {
     assumedTdee: assumedTdee,
     plateau: plateau,
     adjustment: adjustment,
+    projectGoal: projectGoal,
     floorFor: floorFor,
     targetFor: targetFor,
     ACTIVITY: ACTIVITY,
