@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1436+282fc34';
+  var BUILD = '2026-08-31.1443+1cfd3a4';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1410,10 +1410,20 @@
         Math.floor(height / 12) + "'" + Math.round(height % 12) + '", that is ' +
         b.category + '.'));
 
-      box.appendChild(bmiBar(b.bmi));
-
-      // The band in pounds, which is the part that is actually about you.
+      /* The second marker is the nearest edge of the healthy band - the
+       * weight you would actually be aiming at from where you are, rather
+       * than an abstract midpoint nobody targets.
+       */
       var range = T.healthyWeightRange(height);
+      var target = null;
+      if (current > range.max) {
+        target = { bmi: 25, weight: range.max };
+      } else if (current < range.min) {
+        target = { bmi: 18.5, weight: range.min };
+      }
+
+      box.appendChild(bmiBar(b.bmi, target));
+
       var feet = Math.floor(height / 12) + "'" + Math.round(height % 12) + '"';
       var text = 'A healthy weight at ' + feet + ' is ' + round(range.min) +
         ' to ' + round(range.max) + ' lb. ';
@@ -1448,11 +1458,8 @@
     // --- composition ---
     var c = T.composition(weighIns);
     if (!c.readings) {
-      box.appendChild(hintP('There is no way to measure muscle from a scale ' +
-        'reading - weight is everything at once. If you have a body fat ' +
-        'percentage from a smart scale, calipers or a scan, add it beside your ' +
-        'weight and this will split you into lean and fat mass and show which ' +
-        'one is actually moving.'));
+      box.appendChild(hintP('Add a body fat % or muscle mass beside a weigh-in ' +
+        'and this will track which of fat and muscle is moving.'));
       return;
     }
     if (c.readings < 2) {
@@ -1494,7 +1501,7 @@
   /* The BMI bar: coloured bands and a marker for where you are. Built from
    * trend.js's segments so the thresholds live in one place.
    */
-  function bmiBar(current) {
+  function bmiBar(current, target) {
     var T = CalTrack.trend;
     var wrap = document.createElement('div');
     wrap.className = 'bmibar-wrap';
@@ -1519,6 +1526,17 @@
     you.innerHTML = '<b>' + round(current, 1) + '</b>you';
     marks.appendChild(you);
 
+    if (target) {
+      var t = document.createElement('div');
+      t.className = 'bmimark target';
+      t.style.left = T.bmiPercent(target.bmi) + '%';
+      t.innerHTML = '<b>' + round(target.weight) + ' lb</b>healthy';
+      // Two labels on the same spot would overlap illegibly.
+      if (Math.abs(T.bmiPercent(target.bmi) - T.bmiPercent(current)) < 12) {
+        t.style.top = '17px';
+      }
+      marks.appendChild(t);
+    }
     wrap.appendChild(marks);
 
     var scale = document.createElement('div');

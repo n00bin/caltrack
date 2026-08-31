@@ -414,6 +414,8 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
   white-space: nowrap;
 }
 .bmimark b { display: block; font-size: .78rem; color: var(--text); }
+.bmimark.target::before { color: var(--accent); }
+.bmimark.target b { color: var(--accent); }
 .bmimark::before {
   content: '▲';
   display: block;
