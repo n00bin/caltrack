@@ -55,7 +55,9 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   off and the calories don't.
 - **Trend** — weigh in, and the chart shows the smoothed trend line
   prominently with the raw scale readings faint behind it. Weighing twice in
-  a day replaces the reading rather than stacking it.
+  a day replaces the reading rather than stacking it. The date box follows
+  the calendar even when the phone keeps the app open for days, so a Thursday
+  weigh-in does not land on Tuesday and wipe Tuesday's reading.
 - **What you actually burn** — your TDEE, backed out of what really happened
   rather than predicted from a formula, with an honest label on it: *not yet
   reliable*, *early estimate*, or *measured*.
@@ -442,6 +444,7 @@ there are no accounts yet. That means:
 | `test-scan.js` | `node test-scan.js` — barcode check-digits and the API parsing, against real captured responses in `test-fixtures/`. |
 | `test-trend.js` | `node test-trend.js` — the TDEE and plateau maths against synthetic data with known answers. |
 | `test-mealrow.js` | `node test-mealrow.js` — the meal editor keeps an ingredient whose food was deleted, instead of dropping it on Save. |
+| `test-today.js` | `node test-today.js` — the log date and weigh-in date box roll forward when the app is left open past midnight. |
 | `usda.js` | USDA FoodData Central, the second opinion. Inert without a key. |
 | `test-usda.js` | `node test-usda.js` — the USDA mapping, against a real captured record. |
 | `test-shell.js` | `node test-shell.js` — checks every file the page loads is in the offline cache, and that the manifest will actually install. |
@@ -450,7 +453,8 @@ there are no accounts yet. That means:
 
 All of them run without a browser and without a network: `node test-store.js
 && node test-scan.js && node test-trend.js && node test-usda.js && node
-test-shell.js && node test-audit.js && node test-mealrow.js` is 468 checks in
+test-shell.js && node test-audit.js && node test-mealrow.js && node
+test-today.js` is 477 checks in
 about a second.
 
 `store.js` is deliberately walled off, and every one of its functions returns a

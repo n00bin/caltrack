@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-09-03.0705+521bc7f';
+  var BUILD = '2026-09-03.0840+5133585';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -155,6 +155,28 @@
     if (name === 'foods') renderFoodsView();
     if (name === 'trend') renderTrend();
     if (name === 'settings') renderSettings();
+  }
+
+  /* A phone keeps the app open for days at a stretch, and everything that
+   * was "today" when it opened - the log's date, the weigh-in date box -
+   * stayed put across midnight. A weigh-in two mornings later then saved
+   * against the old date and REPLACED that day's reading, since there is
+   * one reading per day. The list looked as if it was only keeping a few
+   * days. So the date rolls forward whenever the app comes back into view
+   * and the calendar has moved - but only where the user had not picked a
+   * different day on purpose.
+   */
+  var knownToday = localDate(new Date());
+  function rollDay() {
+    var today = localDate(new Date());
+    if (today === knownToday) return false;
+    var wasToday = knownToday;
+    knownToday = today;
+    if (state.date === wasToday) state.date = today;
+    var box = $('weightDate');
+    if (!box.value || box.value === wasToday) box.value = today;
+    setView(state.view);   // redraw whatever is on screen with the new day
+    return true;
   }
 
   function setSegment(which) {
@@ -1861,6 +1883,9 @@
       $('weightInput').value = '';
       $('bodyFatInput').value = '';
       $('muscleInput').value = '';
+      // Back to today, so a date picked to backfill one reading is not
+      // silently reused for the next one.
+      $('weightDate').value = localDate(new Date());
       toast('Weight saved');
       renderTrend();
     }).catch(function (err) { showError(msg, err.message); });
@@ -2782,6 +2807,13 @@
   function init() {
     $('buildId').textContent = BUILD;
     bind();
+    // The calendar moves while the app sits open in the background; see rollDay.
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) rollDay();
+    });
+    window.addEventListener('focus', function () { rollDay(); });
+    window.addEventListener('pageshow', function () { rollDay(); });
+    setInterval(rollDay, 60 * 1000);
     registerServiceWorker();
     store.getSettings().then(function (s) {
       state.settings = s;
