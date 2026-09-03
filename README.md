@@ -59,8 +59,9 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
 - **What you actually burn** — your TDEE, backed out of what really happened
   rather than predicted from a formula, with an honest label on it: *not yet
   reliable*, *early estimate*, or *measured*.
-- **BMI and body composition** — BMI from your height and smoothed weight, on
-  a banded bar with your position marked, and underneath it the healthy band
+- **BMI and body composition** — BMI from your height and latest weigh-in, on
+  a banded bar with your position marked, the smoothed trend's BMI noted
+  beside it, and underneath it the healthy band
   translated into actual pounds for your height: *"A healthy weight at 5'10"
   is 129 to 174 lb."* BMI divides height out already, so the band is the same
   for everyone — only the weight it lands on changes. A
@@ -68,8 +69,10 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   them, and the app tracks which of fat and muscle is actually moving.
 - **Getting to your goal** — a date, worked out from the trend you are
   actually on rather than the one you meant to be on, with the planned-rate
-  date beside it for comparison. Flat or going the wrong way gives no date and
-  says why, instead of a number that means nothing.
+  date beside it for comparison. The pounds to go are read off the trend line
+  at your last weigh-in, with what the scale itself said noted underneath.
+  Flat or going the wrong way gives no date and says why, instead of a number
+  that means nothing.
 - **Plateau detection** — compares the loss your logged deficit predicts
   against the loss the scale actually shows, and raises a tiered, honestly
   worded alert. If it's confident, it offers two levers — eat less, or move
@@ -239,7 +242,7 @@ Two deliberate refusals in the parsing, both covered by tests:
 ## The maths, and one deliberate change to the plan
 
 `trend.js` holds all of it, touches neither the DOM nor storage, and is
-covered by 93 checks against synthetic data where the right answer is known
+covered by 196 checks against synthetic data where the right answer is known
 in advance — including the plan's own worked example (2,100 kcal a day and
 2 lb lost over 28 days gives a TDEE of 2,350).
 
@@ -255,6 +258,16 @@ So the change is measured with a least-squares fit through the weigh-ins
 instead. No warm-up, uses every reading rather than two, and it's what the
 flat-trend test needs anyway. The EMA is still what you see on the chart.
 There's a test that fails if endpoint differencing is ever put back.
+
+**Which days count.** The average intake and the weight change are measured
+over the same days: from the first weigh-in in the window up to the day
+before the last one. What you ate today has not reached the scale yet, and
+what you ate before the first weigh-in went into the weight that was already
+there. Averaging over the whole window instead, as it used to, let a few
+heavy days before you started weighing again push the burn rate up by a
+couple of hundred calories with the *measured* badge on it, and let a
+half-logged today drag it down every time you opened the screen before
+dinner. Tests cover both.
 
 **The starting target.** A formula can't tell you your burn rate, but it can
 give you somewhere to stand for the first fortnight. Settings uses
@@ -428,15 +441,17 @@ there are no accounts yet. That means:
 | `test-store.js` | `node test-store.js` — the data layer, portions, meals, batch cooking. |
 | `test-scan.js` | `node test-scan.js` — barcode check-digits and the API parsing, against real captured responses in `test-fixtures/`. |
 | `test-trend.js` | `node test-trend.js` — the TDEE and plateau maths against synthetic data with known answers. |
+| `test-mealrow.js` | `node test-mealrow.js` — the meal editor keeps an ingredient whose food was deleted, instead of dropping it on Save. |
 | `usda.js` | USDA FoodData Central, the second opinion. Inert without a key. |
 | `test-usda.js` | `node test-usda.js` — the USDA mapping, against a real captured record. |
 | `test-shell.js` | `node test-shell.js` — checks every file the page loads is in the offline cache, and that the manifest will actually install. |
 | `manifest.json`, `sw.js` | What makes it installable and offline-capable. |
 | `tools/make-icons.py` | Regenerates `icons/` if the mark ever changes. |
 
-All three run without a browser and without a network: `node test-store.js &&
-node test-scan.js && node test-trend.js && node test-usda.js && node
-test-shell.js` is 290 checks in about a second.
+All of them run without a browser and without a network: `node test-store.js
+&& node test-scan.js && node test-trend.js && node test-usda.js && node
+test-shell.js && node test-audit.js && node test-mealrow.js` is 468 checks in
+about a second.
 
 `store.js` is deliberately walled off, and every one of its functions returns a
 Promise even though `localStorage` is instant. That's so the phase 3 move to
@@ -464,7 +479,9 @@ per-100 g only appears for foods that have no serving to speak of.
 A log entry stores the food it came from *and* a snapshot of the calories and
 macros as they were when you logged it. So correcting a food's nutrition later
 fixes it going forward without silently rewriting your history, and deleting a
-food leaves past entries intact.
+food leaves past entries intact. A meal that used the deleted food keeps the
+ingredient, shown as *Deleted food*, until you replace or remove it yourself;
+the delete prompt names the meals it is in.
 
 The keys are `caltrack.foods`, `caltrack.log_entries`, `caltrack.meals`,
 `caltrack.weigh_ins`, `caltrack.activity` and `caltrack.settings` — one per

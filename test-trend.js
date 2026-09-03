@@ -147,7 +147,36 @@ function makeRun(opts) {
     skipLog: i => i % 7 === 3 });
   const m = T.measureTdee({ entries: run.entries, weighIns: run.weighIns, asOf: run.asOf });
   near('unlogged days are ignored, not counted as zero', m.avgIntake, 2100, 0.5);
-  eq('only the logged days count', m.loggedDays, 24);
+  // 27 days between the first and last weigh-in, four of them unlogged.
+  eq('only the logged days count', m.loggedDays, 23);
+}
+
+// Intake is averaged over the days the weight change covers, not the whole
+// window. Five heavy days logged BEFORE the weigh-ins begin cannot have
+// caused a loss that was measured after them, so they must not touch it.
+{
+  const clean = makeRun({ days: 28, intake: 2000, startWeight: 250, lbsPerDay: 2 / 22,
+    skipWeigh: i => i < 5, skipLog: i => i < 5 });
+  const heavy = makeRun({ days: 28, intake: i => (i < 5 ? 3200 : 2000), startWeight: 250,
+    lbsPerDay: 2 / 22, skipWeigh: i => i < 5 });
+  const a = T.measureTdee({ entries: clean.entries, weighIns: clean.weighIns, asOf: clean.asOf });
+  const b = T.measureTdee({ entries: heavy.entries, weighIns: heavy.weighIns, asOf: heavy.asOf });
+  near('heavy days before the first weigh-in do not move the TDEE', b.tdee, a.tdee, 1e-6);
+  near('average intake covers the weighed span only', b.avgIntake, 2000, 0.5);
+}
+
+// Nor is the day of the last weigh-in counted: what was eaten today has not
+// reached the scale yet, and a half-logged today would otherwise drag the
+// average down every time the screen was opened before dinner.
+{
+  const full = makeRun({ days: 28, intake: 2100, startWeight: 220, lbsPerDay: 2 / 27 });
+  const partial = makeRun({ days: 28, intake: i => (i === 27 ? 300 : 2100), startWeight: 220,
+    lbsPerDay: 2 / 27 });
+  const a = T.measureTdee({ entries: full.entries, weighIns: full.weighIns, asOf: full.asOf });
+  const b = T.measureTdee({ entries: partial.entries, weighIns: partial.weighIns, asOf: partial.asOf });
+  near('a half-logged today does not move the TDEE', b.tdee, a.tdee, 1e-6);
+  eq('28 readings span 27 days', b.days, 27);
+  eq('and exactly those 27 days of eating are counted', b.loggedDays, 27);
 }
 
 // ------------------------------------------------------ plateau tiers
@@ -161,6 +190,17 @@ const settings = { target_kcal: 2000, target_rate_lbs_per_week: 1, tdee_override
   const p = T.plateau({ entries: run.entries, weighIns: run.weighIns, settings, asOf: run.asOf });
   eq('on-track raises nothing', p.tier, 'none');
   near('ratio about 1', p.ratio, 1, 0.05);
+}
+
+// The plateau check averages over the same span. Fasting days before the
+// weigh-ins began would otherwise inflate the deficit and shrink the ratio.
+{
+  const run = makeRun({ days: 28, intake: i => (i < 5 ? 500 : 2000), startWeight: 220,
+    lbsPerDay: 1 / 7, skipWeigh: i => i < 5 });
+  const p = T.plateau({ entries: run.entries, weighIns: run.weighIns, settings, asOf: run.asOf });
+  near('plateau averages intake over the weighed span only', p.avgIntake, 2000, 0.5);
+  near('so the ratio stays about 1', p.ratio, 1, 0.05);
+  eq('and nothing is raised', p.tier, 'none');
 }
 
 // Dead flat for four weeks: confirmed.
@@ -556,7 +596,9 @@ eq('nothing to describe', T.readTissueRate(null, 'Muscle'), '');
     weighIns: run.weighIns, asOf: run.asOf,
     settings: { goal_weight_lbs: 200, target_rate_lbs_per_week: 1 }
   });
-  near('current weight is the smoothed one, not this morning', g.current, 218.6, 1.5);
+  // 27 days at a pound a week from 220 is 216.14 at the last reading.
+  near('current weight is the trend line at the last weigh-in', g.current, 216.14, 0.05);
+  near('and the latest reading is reported alongside', g.latest, 216.1, 0.05);
   near('rate matches the trend', g.ratePerWeek, 1, 0.05);
   ok('an arrival date exists', !!g.date);
   near('about as many weeks as pounds at a pound a week', g.weeks, g.toGo, 0.6);
@@ -607,6 +649,29 @@ eq('nothing to describe', T.readTissueRate(null, 'Muscle'), '');
     settings: { goal_weight_lbs: 200 } });
   eq('eight days is not enough to trust a date', g.confidence, 'none');
   ok('though a date is still offered, labelled', !!g.date);
+}
+
+// The trend line has no lag. The EMA it replaced settled nine readings
+// behind, which put "to go" 1.3 lb high and the date nine days late for
+// anyone weighing in daily at a pound a week. This fails if that comes back.
+{
+  const run = makeRun({ days: 60, intake: 2000, startWeight: 250, lbsPerDay: 1 / 7 });
+  const g = T.projectGoal({ weighIns: run.weighIns, asOf: run.asOf,
+    settings: { goal_weight_lbs: 230 } });
+  const trueNow = 250 - 59 / 7;
+  near('current has no lag behind the true trend', g.current, trueNow, 0.15);
+  const trueArrival = dstr(D0 + 59 + Math.round((trueNow - 230) * 7));
+  eq('so the arrival date lands where the trend points', g.date, trueArrival);
+}
+
+// One puffy morning barely moves the trend figure, but it is reported.
+{
+  const run = makeRun({ days: 28, intake: 2000, startWeight: 220, lbsPerDay: 1 / 7,
+    bump: i => (i === 27 ? 2 : 0) });
+  const g = T.projectGoal({ weighIns: run.weighIns, asOf: run.asOf,
+    settings: { goal_weight_lbs: 200 } });
+  ok('a 2 lb bump moves the trend figure by well under a pound', Math.abs(g.current - 216.14) < 0.6);
+  near('while the latest reading shows the bump in full', g.toGoLatest - g.toGo, 2, 0.6);
 }
 
 eq('no goal, no projection',

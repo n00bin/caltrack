@@ -100,7 +100,9 @@ CalTrack.trend = (function () {
    */
   function linearFit(points, key) {
     key = key || 'raw';
-    if (!points || points.length < 2) return { slopePerDay: 0, n: points ? points.length : 0 };
+    if (!points || points.length < 2) {
+      return { slopePerDay: 0, intercept: null, n: points ? points.length : 0 };
+    }
     var n = points.length;
     var sx = 0, sy = 0, sxx = 0, sxy = 0;
     points.forEach(function (p) {
@@ -109,8 +111,14 @@ CalTrack.trend = (function () {
       sx += x; sy += y; sxx += x * x; sxy += x * y;
     });
     var denom = (n * sxx) - (sx * sx);
-    if (!denom) return { slopePerDay: 0, n: n };
-    return { slopePerDay: ((n * sxy) - (sx * sy)) / denom, n: n };
+    if (!denom) return { slopePerDay: 0, intercept: sy / n, n: n };
+    var slope = ((n * sxy) - (sx * sy)) / denom;
+    return { slopePerDay: slope, intercept: (sy - slope * sx) / n, n: n };
+  }
+
+  // Where the fitted line sits on a given day number.
+  function fitAt(fit, day) {
+    return fit.slopePerDay * day + fit.intercept;
   }
 
   function slopeLbsPerWeek(points, key) {
@@ -156,12 +164,12 @@ CalTrack.trend = (function () {
 
     var smoothed = emaSeries(opts.weighIns);
     var win = inWindow(smoothed, fromDay, toDay);
-    var intake = inWindow(dailyIntake(opts.entries), fromDay, toDay);
+    var logged = dailyIntake(opts.entries);
 
     if (win.length < 2) {
       return Object.assign({}, blank, {
         weighInCount: win.length,
-        loggedDays: intake.length,
+        loggedDays: inWindow(logged, fromDay, toDay).length,
         reason: 'Needs at least two weigh-ins in the window.'
       });
     }
@@ -171,9 +179,21 @@ CalTrack.trend = (function () {
     var days = dayNumber(last.date) - dayNumber(first.date);
     var lost = measuredLoss(win, days);          // positive when losing
 
+    /* Intake is averaged over exactly the days the weight change covers:
+     * from the first weigh-in up to the day BEFORE the last one. What was
+     * eaten on the day of the last weigh-in has not reached the scale yet,
+     * and what was eaten before the first one went into the weight that
+     * was already there. Averaging over the whole window instead counted a
+     * few heavy days before the weigh-ins began as if they had produced a
+     * loss they had nothing to do with - a couple of hundred calories out,
+     * with the "measured" badge on it - and counted today as a full day of
+     * eating the moment breakfast was logged.
+     */
+    var intake = inWindow(logged, dayNumber(first.date), dayNumber(last.date) - 1);
+
     var kcalSum = intake.reduce(function (a, r) { return a + r.kcal; }, 0);
     var avgIntake = intake.length ? kcalSum / intake.length : null;
-    var coverage = intake.length / windowDays;
+    var coverage = days ? intake.length / days : 0;
 
     var result = {
       tdee: null,
@@ -282,13 +302,17 @@ CalTrack.trend = (function () {
     var fromDay = toDay - windowDays + 1;
 
     var smoothed = inWindow(emaSeries(opts.weighIns), fromDay, toDay);
-    var intakeWin = inWindow(dailyIntake(opts.entries), fromDay, toDay);
-    if (smoothed.length < 2 || !intakeWin.length) return none;
+    if (smoothed.length < 2) return none;
 
     var first = smoothed[0];
     var last = smoothed[smoothed.length - 1];
     var days = dayNumber(last.date) - dayNumber(first.date);
     if (!days) return none;
+
+    // The same days the weight change covers - see measureTdee for why.
+    var intakeWin = inWindow(dailyIntake(opts.entries),
+      dayNumber(first.date), dayNumber(last.date) - 1);
+    if (!intakeWin.length) return none;
 
     var avgIntake = intakeWin.reduce(function (a, r) { return a + r.kcal; }, 0) / intakeWin.length;
     var avgDeficit = reference - avgIntake;
@@ -682,7 +706,7 @@ CalTrack.trend = (function () {
 
     var base = {
       goal: goal > 0 ? goal : null,
-      current: null, toGo: null,
+      current: null, toGo: null, latest: null, toGoLatest: null,
       ratePerWeek: null, weeks: null, date: null,
       planned: null, confidence: 'none', reason: ''
     };
@@ -707,10 +731,21 @@ CalTrack.trend = (function () {
       return base;
     }
 
-    // The smoothed figure, not this morning's reading.
-    var current = win[win.length - 1].ema;
+    /* "Current" is the fitted trend line read at the last weigh-in. Not this
+     * morning's reading, which is water and salt as much as fat - and not
+     * the smoothed EMA either, which runs about nine readings behind, so
+     * "to go" was overstated by more than a pound at a pound a week and the
+     * arrival date landed nine days late, every day. The straight-line fit
+     * has no lag, and it is the same fit the rate below comes from.
+     */
+    var lastRow = win[win.length - 1];
+    var lastDay = dayNumber(lastRow.date);
+    var fit = linearFit(win, 'raw');
+    var current = fitAt(fit, lastDay);
     base.current = current;
     base.toGo = current - goal;
+    base.latest = lastRow.raw;
+    base.toGoLatest = lastRow.raw - goal;
 
     if (Math.abs(base.toGo) < 0.5) {
       base.reason = 'You are there.';
@@ -719,11 +754,11 @@ CalTrack.trend = (function () {
     }
 
     // Positive when moving towards the goal, whichever side of it you start.
-    var slope = slopeLbsPerWeek(win, 'raw');
+    var slope = fit.slopePerDay * 7;
     var towards = base.toGo > 0 ? -slope : slope;
     base.ratePerWeek = Math.abs(slope);
 
-    var days = dayNumber(win[win.length - 1].date) - dayNumber(win[0].date);
+    var days = lastDay - dayNumber(win[0].date);
     if (days < MIN_DAYS_FOR_TDEE || win.length < MIN_WEIGH_INS) {
       base.confidence = 'none';
     } else if (days < 21) {
@@ -732,10 +767,11 @@ CalTrack.trend = (function () {
       base.confidence = 'ok';
     }
 
+    // Dates count from the last weigh-in, where "current" was measured.
     if (towards > 0.05) {
       var weeks = Math.abs(base.toGo) / towards;
       base.weeks = weeks;
-      base.date = dateFromDay(toDay + Math.round(weeks * 7));
+      base.date = dateFromDay(lastDay + Math.round(weeks * 7));
       base.reason = 'At the rate you are actually going.';
     } else {
       base.reason = towards < -0.05
@@ -750,7 +786,7 @@ CalTrack.trend = (function () {
       base.planned = {
         ratePerWeek: planned,
         weeks: plannedWeeks,
-        date: dateFromDay(toDay + Math.round(plannedWeeks * 7))
+        date: dateFromDay(lastDay + Math.round(plannedWeeks * 7))
       };
     }
 

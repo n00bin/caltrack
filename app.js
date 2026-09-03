@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-08-31.1517+ebea779';
+  var BUILD = '2026-09-03.0705+521bc7f';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -1012,12 +1012,25 @@
   function deleteFood() {
     var id = state.editingFoodId;
     if (!id) return;
-    store.log.query(function (e) { return e.food_id === id; }).then(function (used) {
+    Promise.all([
+      store.log.query(function (e) { return e.food_id === id; }),
+      store.meals.query(function (m) {
+        return (m.items || []).some(function (it) { return it.food_id === id; });
+      })
+    ]).then(function (res) {
+      var used = res[0];
+      var meals = res[1];
       var warn = 'Delete this food?';
       if (used.length) {
         warn += '\n\nIt is used by ' + used.length + ' log entr' +
           (used.length === 1 ? 'y' : 'ies') +
           '. Those stay in your log with the calories already worked out.';
+      }
+      if (meals.length) {
+        warn += '\n\nIt is in ' + meals.length + ' meal' + (meals.length === 1 ? '' : 's') +
+          ' (' + meals.map(function (m) { return m.name; }).join(', ') + '). ' +
+          (meals.length === 1 ? 'That meal' : 'Those meals') +
+          ' will show it as "Deleted food" until you replace or remove it there.';
       }
       if (!window.confirm(warn)) return;
       store.foods.remove(id).then(function () {
@@ -1138,7 +1151,22 @@
         opt.textContent = foodLabel(f);
         foodSel.appendChild(opt);
       });
-    if (item && item.food_id) foodSel.value = item.food_id;
+    if (item && item.food_id) {
+      foodSel.value = item.food_id;
+      /* The food may have been deleted since this meal was saved. The
+       * picker then had nothing to select, so the row read as empty and
+       * the next Save wrote the meal without that ingredient - silently.
+       * Keep it on the row, labelled, until it is replaced or removed on
+       * purpose. The meal-logging sheet already shows it this way.
+       */
+      if (foodSel.value !== item.food_id) {
+        var gone = document.createElement('option');
+        gone.value = item.food_id;
+        gone.textContent = 'Deleted food';
+        foodSel.insertBefore(gone, foodSel.firstChild);
+        foodSel.value = item.food_id;
+      }
+    }
 
     var portionSel = document.createElement('select');
     portionSel.className = 'm-portion';
@@ -1160,7 +1188,11 @@
     function fillPortions(selected) {
       var food = state.mealFoods.filter(function (f) { return f.id === foodSel.value; })[0];
       portionSel.innerHTML = '';
-      ((food && food.portions) || [{ name: 'gram', grams: 1 }]).forEach(function (p) {
+      var portions = (food && food.portions) || [{ name: 'gram', grams: 1 }];
+      // A deleted food keeps the portion it was saved with, so the row
+      // round-trips through Save untouched.
+      if (!food && selected && selected !== 'gram') portions = [{ name: selected }];
+      portions.forEach(function (p) {
         var opt = document.createElement('option');
         opt.value = p.name;
         opt.textContent = p.name === 'gram' ? 'grams' : p.name;
@@ -1472,19 +1504,31 @@
     var T = CalTrack.trend;
 
     // --- BMI ---
+    /* From the latest reading, so it moves when a weigh-in does. It used to
+     * be built from the smoothed trend, which only creeps a tenth of the way
+     * toward each new reading - three pounds off the scale moved the BMI by
+     * a tenth, and it looked frozen. The trend still gets a line underneath,
+     * because the scale is noisy and the trend is the better long-run guide.
+     */
     var smoothed = T.emaSeries(weighIns);
-    var current = smoothed.length ? smoothed[smoothed.length - 1].ema : null;
+    var latest = smoothed.length ? smoothed[smoothed.length - 1] : null;
+    var current = latest ? latest.raw : null;
     var height = state.settings.height_in;
 
     if (current && height > 0) {
       var b = T.bmi(current, height);
+      var feet = Math.floor(height / 12) + "'" + Math.round(height % 12) + '"';
       var line = document.createElement('div');
       line.className = 'bignum';
       line.innerHTML = '<b>' + round(b.bmi, 1) + '</b> BMI';
       box.appendChild(line);
-      box.appendChild(hintP('At ' + round(current, 1) + ' lb and ' +
-        Math.floor(height / 12) + "'" + Math.round(height % 12) + '", that is ' +
-        b.category + '.'));
+      var atText = 'At ' + round(current, 1) + ' lb and ' + feet + ', that is ' +
+        b.category + '.';
+      if (smoothed.length > 1) {
+        atText += ' The smoothed trend sits at ' + round(latest.ema, 1) +
+          ' lb, BMI ' + round(T.bmi(latest.ema, height).bmi, 1) + '.';
+      }
+      box.appendChild(hintP(atText));
 
       /* The second marker is the nearest edge of the healthy band - the
        * weight you would actually be aiming at from where you are, rather
@@ -1500,7 +1544,6 @@
 
       box.appendChild(bmiBar(b.bmi, target));
 
-      var feet = Math.floor(height / 12) + "'" + Math.round(height % 12) + '"';
       var text = 'A healthy weight at ' + feet + ' is ' + round(range.min) +
         ' to ' + round(range.max) + ' lb. ';
 
@@ -1676,6 +1719,14 @@
         ' lb still to go.'));
     }
 
+    // The figure above is the trend line. The scale says something else
+    // most mornings, and that is the number the weigh-in list shows.
+    if (g.toGoLatest !== null && Math.abs(g.toGoLatest - g.toGo) >= 0.05) {
+      box.appendChild(hintP('That is on the trend line. Your latest reading, ' +
+        round(g.latest, 1) + ' lb, puts it at ' + Math.abs(round(g.toGoLatest, 1)) +
+        ' lb to go.'));
+    }
+
     if (g.planned) {
       box.appendChild(hintP('At your target of ' + g.planned.ratePerWeek +
         ' lb a week it would be ' + prettyDate(g.planned.date) + '.'));
@@ -1818,7 +1869,9 @@
   function renderWeighList(weighIns) {
     var box = $('weighList');
     box.innerHTML = '';
-    var rows = weighIns.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 14);
+    var T = CalTrack.trend;
+    var all = weighIns.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    var rows = all.slice(0, 14);
 
     if (!rows.length) {
       box.appendChild(emptyNote('No weigh-ins yet.'));
@@ -1836,9 +1889,20 @@
       name.textContent = w.weight_lbs.toFixed(1) + ' lb';
       var sub = document.createElement('div');
       sub.className = 'entry-sub';
-      var delta = (i + 1 < rows.length) ? w.weight_lbs - rows[i + 1].weight_lbs : null;
-      sub.textContent = prettyDate(w.date) +
-        (delta === null ? '' : '  ' + (delta > 0 ? '+' : '') + delta.toFixed(1) + ' lb');
+      /* Change since the reading before this one. That reading may be more
+       * than a day back, so the gap is said when it is - a figure that spans
+       * two days looks exactly like a one-day figure otherwise. It is looked
+       * up in the full list, so the oldest row on screen gets one too.
+       */
+      var prev = all[i + 1];
+      var subText = prettyDate(w.date);
+      if (prev) {
+        var delta = w.weight_lbs - prev.weight_lbs;
+        var days = T.dayNumber(w.date) - T.dayNumber(prev.date);
+        subText += '  ' + (delta > 0 ? '+' : '') + delta.toFixed(1) + ' lb';
+        if (days > 1) subText += ' over ' + days + ' days';
+      }
+      sub.textContent = subText;
       main.appendChild(name);
       main.appendChild(sub);
 
