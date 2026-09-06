@@ -5,7 +5,7 @@
 
   // Stamped by tools/stamp.py. Shown in Settings so a bug report can say
   // which version it is about.
-  var BUILD = '2026-09-03.0840+5133585';
+  var BUILD = '2026-09-06.1028+7684e1a';
 
   var store = CalTrack.store;
   var nut = CalTrack.nutrition;
@@ -21,6 +21,7 @@
     view: 'today',
     mealTime: guessMealTime(),
     pickedFood: null,
+    editingEntry: null,      // a logged entry being changed in the amount sheet
     editingFoodId: null,
     // Scanning from the log flow should end at the amount box; scanning from
     // the Foods tab should just leave the food saved in the library.
@@ -74,7 +75,7 @@
   function guessMealTime() {
     var h = new Date().getHours();
     if (h < 11) return 'breakfast';
-    if (h < 15) return 'lunch';
+    if (h < 17) return 'lunch';     // a 3pm meal is a late lunch, not dinner
     if (h < 21) return 'dinner';
     return 'snack';
   }
@@ -121,13 +122,37 @@
       : 'That puts you ' + round(-left) + ' over.';
   }
 
+  // The same answer as a line of HTML, red when it is an "over".
+  function fitsHtml(extraKcal) {
+    var target = state.settings.target_kcal;
+    if (!(target > 0)) return '';
+    var over = (target - (state.dayTotal || 0) - extraKcal) < 0;
+    return '<br><span class="fits' + (over ? ' over' : '') + '">' +
+      leftAfter(extraKcal) + '</span>';
+  }
+
+  /* A toast, optionally with one action on it - "Undo" - which is how a
+   * mis-tap on a delete gets taken back. With an action it stays up long
+   * enough to reach for.
+   */
   var toastTimer = null;
-  function toast(text) {
+  function toast(text, action) {
     var el = $('toast');
-    el.textContent = text;
+    el.innerHTML = '';
+    el.appendChild(document.createTextNode(text));
+    if (action) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = action.label;
+      btn.addEventListener('click', function () {
+        el.hidden = true;
+        action.onClick();
+      });
+      el.appendChild(btn);
+    }
     el.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.hidden = true; }, 2200);
+    toastTimer = setTimeout(function () { el.hidden = true; }, action ? 6000 : 2200);
   }
 
   function showError(el, message) {
@@ -303,6 +328,28 @@
     main.appendChild(name);
     main.appendChild(sub);
 
+    /* Tapping the row changes the amount, the way tapping a food in the
+     * library edits it. Before, the only way to fix "2, not 1" was to delete
+     * and re-add - which re-guessed the meal from the clock, so a lunch
+     * corrected at 6pm quietly moved to dinner.
+     */
+    main.classList.add('editable');
+    main.setAttribute('role', 'button');
+    main.tabIndex = 0;
+    function editEntry() {
+      if (entry.meal_id) {
+        toast('To change a logged meal, remove it and log it again.');
+      } else if (!food) {
+        toast('That food was deleted from the library. Remove this and log it again.');
+      } else {
+        openQtySheet(food, entry);
+      }
+    }
+    main.addEventListener('click', editEntry);
+    main.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); editEntry(); }
+    });
+
     var kcal = document.createElement('div');
     kcal.className = 'entry-kcal';
     kcal.textContent = round(entry.computed_kcal) + ' kcal';
@@ -313,8 +360,11 @@
     del.innerHTML = '&times;';
     del.addEventListener('click', function () {
       store.log.remove(entry.id).then(function () {
-        toast('Removed');
         renderToday();
+        // Undo puts the same row back, id and all, so nothing else notices.
+        toast('Removed', { label: 'Undo', onClick: function () {
+          store.log.insert(entry).then(renderToday);
+        } });
       });
     });
 
@@ -369,7 +419,8 @@
     $('pickSearch').value = '';
     $('pickSheet').hidden = false;
     setPickSegment('foods');
-    setTimeout(function () { $('pickSearch').focus(); }, 50);
+    // No auto-focus: the keyboard would rise over the recent-foods list,
+    // which is the one-tap path this sheet exists for.
   }
 
   function paintMealTimes() {
@@ -550,9 +601,11 @@
 
   // ------------------------------------------------------ quantity sheet
 
-  function openQtySheet(food) {
+  function openQtySheet(food, entry) {
     state.pickedFood = food;
+    state.editingEntry = entry || null;
     $('qtyFoodName').textContent = foodLabel(food);
+    $('qtyConfirm').textContent = entry ? 'Save change' : 'Add to log';
 
     var sel = $('qtyPortion');
     sel.innerHTML = '';
@@ -569,6 +622,12 @@
     var named = food.portions.filter(function (p) { return p.name !== 'gram'; })[0];
     sel.value = named ? named.name : 'gram';
     $('qtyAmount').value = named ? 1 : 100;
+    if (entry) {
+      // What is logged now, so the change starts from the real figure.
+      sel.value = entry.portion;
+      if (sel.value !== entry.portion) sel.value = 'gram';
+      $('qtyAmount').value = entry.qty;
+    }
 
     updateQtyPreview();
     $('qtySheet').hidden = false;
@@ -582,23 +641,45 @@
     var portion = $('qtyPortion').value;
     var grams = nut.gramsFor(food, portion, qty);
     var m = nut.macrosForGrams(food, grams);
-    var fits = leftAfter(m.kcal);
+    // When changing an entry, its own calories are already in the day.
+    var already = state.editingEntry ? state.editingEntry.computed_kcal : 0;
     $('qtyPreview').innerHTML =
       '<b>' + round(m.kcal) + '</b> kcal<br>' +
       round(grams, 1) + ' ' + unitOf(food) + '  -  ' +
       round(m.protein, 1) + ' g protein, ' +
       round(m.carbs, 1) + ' g carbs, ' +
       round(m.fat, 1) + ' g fat' +
-      (fits ? '<br><span class="fits">' + fits + '</span>' : '');
+      fitsHtml(m.kcal - already);
   }
 
   function confirmQty() {
     var food = state.pickedFood;
+    if (!food) return;
     var qty = parseFloat($('qtyAmount').value);
     if (!isFinite(qty) || qty <= 0) { toast('Enter an amount above zero'); return; }
 
     var portion = $('qtyPortion').value;
     var m = nut.macrosFor(food, portion, qty);
+
+    // Changing an existing entry keeps its day and meal; only the amount moves.
+    var editing = state.editingEntry;
+    if (editing) {
+      store.log.update(editing.id, {
+        portion: portion,
+        qty: qty,
+        computed_kcal: m.kcal,
+        computed_protein_g: m.protein,
+        computed_carbs_g: m.carbs,
+        computed_fat_g: m.fat
+      }).then(function () {
+        $('qtySheet').hidden = true;
+        state.pickedFood = null;
+        state.editingEntry = null;
+        toast('Changed to ' + round(m.kcal) + ' kcal');
+        renderToday();
+      }).catch(function (err) { toast(err.message); });
+      return;
+    }
 
     store.log.insert({
       date: state.date,
@@ -1402,11 +1483,9 @@
 
   function refreshMealLogTotals() {
     var t = mealTotals(collectMealLogItems(), indexById(state.mealFoods || []));
-    var fits = leftAfter(t.kcal);
     $('mealLogTotals').innerHTML = '<b>' + round(t.kcal) + '</b> kcal<br>' +
       round(t.protein, 1) + ' g protein, ' + round(t.carbs, 1) + ' g carbs, ' +
-      round(t.fat, 1) + ' g fat' +
-      (fits ? '<br><span class="fits">' + fits + '</span>' : '');
+      round(t.fat, 1) + ' g fat' + fitsHtml(t.kcal);
   }
 
   function confirmMealLog() {
@@ -1631,7 +1710,8 @@
       if (lVerdict) box.appendChild(hintP(lVerdict));
     }
 
-    box.appendChild(hintP('Your scale works out fat, muscle and water from one ' +
+    box.appendChild(whyDetails('Why these figures wobble',
+      'Your scale works out fat, muscle and water from one ' +
       'electrical measurement plus the height and age programmed into it, so those ' +
       'figures are not independent of each other - if fat reads low, muscle reads ' +
       'high by construction. Hydration moves it by several points, so weigh in the ' +
@@ -1754,7 +1834,8 @@
         ' lb a week it would be ' + prettyDate(g.planned.date) + '.'));
     }
 
-    box.appendChild(hintP('Both assume the rate holds, and it will not: as you ' +
+    box.appendChild(whyDetails('Why the date will move',
+      'Both assume the rate holds, and it will not: as you ' +
       'get lighter you burn less, so the same food becomes a smaller deficit ' +
       'and the line bends. Treat a far-off date as the optimistic end.'));
   }
@@ -1764,6 +1845,19 @@
     p.className = 'hint';
     p.textContent = text;
     return p;
+  }
+
+  /* A paragraph worth reading once, folded behind a one-line summary so it
+   * is not re-read every day the screen is opened.
+   */
+  function whyDetails(summary, text) {
+    var d = document.createElement('details');
+    d.className = 'why';
+    var s = document.createElement('summary');
+    s.textContent = summary;
+    d.appendChild(s);
+    d.appendChild(hintP(text));
+    return d;
   }
 
   function renderPlateau(p, measured) {
@@ -1786,8 +1880,11 @@
     if (p.expectedLoss !== null && p.expectedLoss !== undefined && p.ratio !== null) {
       var nums = document.createElement('p');
       nums.className = 'hint';
-      nums.textContent = 'Predicted ' + p.expectedLoss.toFixed(1) + ' lb, actually ' +
-        p.actualLoss.toFixed(1) + ' lb, trend ' + p.slope.toFixed(2) + ' lb a week.';
+      // Negative is down, as in the weigh-in list; never "-0.0".
+      var TT = CalTrack.trend;
+      nums.textContent = 'Predicted ' + TT.signedFixed(-p.expectedLoss, 1) + ' lb, actually ' +
+        TT.signedFixed(-p.actualLoss, 1) + ' lb, trend ' + TT.signedFixed(p.slope, 2) +
+        ' lb a week.';
       box.appendChild(nums);
     }
 
@@ -1855,6 +1952,10 @@
 
     if (!isFinite(lbs) || lbs <= 0) { showError(msg, 'Enter your weight in pounds.'); return; }
     if (lbs > 1000) { showError(msg, 'That looks like grams rather than pounds.'); return; }
+    if (lbs < 60 || lbs > 600) {
+      showError(msg, 'Weight here is in pounds, and ' + lbs + ' does not look like pounds.');
+      return;
+    }
 
     var fat = parseFloat($('bodyFatInput').value);
     var muscle = parseFloat($('muscleInput').value);
@@ -1874,18 +1975,47 @@
       return;
     }
 
-    // One reading per day: weighing twice replaces, it does not stack.
-    store.weighIns.query(function (w) { return w.date === date; }).then(function (hits) {
+    var T = CalTrack.trend;
+    store.weighIns.all().then(function (rows) {
+      /* A kilogram figure typed into a pounds box sails through every other
+       * check and then poisons every number on this screen. Nothing can tell
+       * 68 kg from 68 lb on its own, but the nearest other reading can: a
+       * jump of more than a tenth of your weight between two readings is
+       * either a typo or a very long gap, and both deserve a second look.
+       */
+      var others = rows.filter(function (w) { return w.date !== date; });
+      if (others.length) {
+        var day = T.dayNumber(date);
+        var nearest = others.reduce(function (best, w) {
+          return (!best || Math.abs(T.dayNumber(w.date) - day) <
+            Math.abs(T.dayNumber(best.date) - day)) ? w : best;
+        }, null);
+        var diff = lbs - nearest.weight_lbs;
+        if (Math.abs(diff) > nearest.weight_lbs * 0.1) {
+          var sure = window.confirm('That is ' + Math.abs(diff).toFixed(1) + ' lb ' +
+            (diff > 0 ? 'up' : 'down') + ' from ' + nearest.weight_lbs.toFixed(1) +
+            ' lb on ' + prettyDate(nearest.date) + '. Save it anyway?');
+          if (!sure) {
+            showError(msg, 'Not saved. Weight here is in pounds - check the number.');
+            return null;
+          }
+        }
+      }
+      // One reading per day: weighing twice replaces, it does not stack.
+      var hits = rows.filter(function (w) { return w.date === date; });
       return hits.length
         ? store.weighIns.update(hits[0].id, record)
         : store.weighIns.insert(Object.assign({ date: date, user_id: null }, record));
-    }).then(function () {
+    }).then(function (saved) {
+      if (!saved) return;
       $('weightInput').value = '';
       $('bodyFatInput').value = '';
       $('muscleInput').value = '';
       // Back to today, so a date picked to backfill one reading is not
       // silently reused for the next one.
       $('weightDate').value = localDate(new Date());
+      // The toast fades; this stays until the next attempt.
+      msg.textContent = 'Saved ' + lbs.toFixed(1) + ' lb for ' + prettyDate(date) + '.';
       toast('Weight saved');
       renderTrend();
     }).catch(function (err) { showError(msg, err.message); });
@@ -1924,7 +2054,7 @@
       if (prev) {
         var delta = w.weight_lbs - prev.weight_lbs;
         var days = T.dayNumber(w.date) - T.dayNumber(prev.date);
-        subText += '  ' + (delta > 0 ? '+' : '') + delta.toFixed(1) + ' lb';
+        subText += '  ' + T.signedFixed(delta, 1) + ' lb';
         if (days > 1) subText += ' over ' + days + ' days';
       }
       sub.textContent = subText;
@@ -1936,7 +2066,12 @@
       del.innerHTML = '&times;';
       del.setAttribute('aria-label', 'Remove this weigh-in');
       del.addEventListener('click', function () {
-        store.weighIns.remove(w.id).then(function () { toast('Removed'); renderTrend(); });
+        store.weighIns.remove(w.id).then(function () {
+          renderTrend();
+          toast('Weigh-in removed', { label: 'Undo', onClick: function () {
+            store.weighIns.insert(w).then(renderTrend);
+          } });
+        });
       });
 
       row.appendChild(main);
@@ -2192,7 +2327,7 @@
     if (key || !draft || draft.serving) return draft;
     draft.notes = (draft.notes || []).concat([
       'USDA FoodData Central often has the serving size when Open Food Facts ' +
-      'does not. It needs a free key - Settings, "Second food database" - which ' +
+      'does not. It needs a free key - Settings, "USDA lookups" - which ' +
       'takes about thirty seconds and stays on this phone.'
     ]);
     return draft;

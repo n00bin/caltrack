@@ -23,7 +23,7 @@
  * honestly rather than quietly serving yesterday's answer.
  */
 
-const VERSION = 'caltrack-2026-09-03.0840+5133585';
+const VERSION = 'caltrack-2026-09-06.1028+7684e1a';
 
 /* The food list is 1.5 MB and changes only when USDA publishes a new bulk
  * download - which is once or twice a year, not once a deploy. So it lives

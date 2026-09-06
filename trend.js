@@ -356,23 +356,57 @@ CalTrack.trend = (function () {
     return base;
   }
 
+  /* The loss can be negative - the trend went UP - and that used to leak
+   * straight into the prose: "On track: -0.7 lb lost", or "-140% of the way
+   * to the loss". Gaining is said as gaining, in every tier.
+   */
   function messageFor(tier, r) {
+    var up = r.actualLoss < 0;
+    var moved = absLbs(r.actualLoss);
+    var predicted = absLbs(r.expectedLoss);
     var pct = Math.round((r.ratio || 0) * 100);
     if (tier === 'watch') {
+      if (up) {
+        return 'Over ' + r.days + ' days the trend is up ' + moved + ' lb, where your ' +
+          'logged deficit predicted ' + predicted + ' lb off. That is often water or ' +
+          'salt. Hold course and check back in a week.';
+      }
       return 'You are ' + pct + '% of the way to the loss your logged deficit predicts ' +
         'over ' + r.days + ' days. That is often water. Hold course and check back in a week.';
     }
     if (tier === 'likely') {
-      return 'Over ' + r.days + ' days you have lost ' + r.actualLoss.toFixed(1) +
-        ' lb against a predicted ' + r.expectedLoss.toFixed(1) +
+      if (up) {
+        return 'Over ' + r.days + ' days you have gained ' + moved + ' lb against a ' +
+          'predicted loss of ' + predicted + ' lb. Either food is going unlogged or ' +
+          'your burn rate is well below the estimate.';
+      }
+      return 'Over ' + r.days + ' days you have lost ' + moved +
+        ' lb against a predicted ' + predicted +
         ' lb. The trend has flattened and your burn rate has probably dropped.';
     }
     if (tier === 'confirmed') {
       return 'The smoothed trend has been flat for ' + r.days +
         ' days. Time to work the target out from what your body is actually doing.';
     }
-    return 'On track: ' + r.actualLoss.toFixed(1) + ' lb lost against ' +
-      r.expectedLoss.toFixed(1) + ' lb predicted.';
+    if (up) {
+      return 'Up ' + moved + ' lb over ' + r.days + ' days, against a predicted loss of ' +
+        predicted + ' lb. Too few days to read anything into yet.';
+    }
+    return 'On track: ' + moved + ' lb lost against ' + predicted + ' lb predicted.';
+  }
+
+  function absLbs(n) {
+    return Math.abs(Math.round(n * 10) / 10).toFixed(1);
+  }
+
+  /* A signed figure that never prints as "-0.0": round first, then decide
+   * the sign from the rounded value. (-0.03).toFixed(1) is "-0.0".
+   */
+  function signedFixed(n, places) {
+    var f = Math.pow(10, places);
+    var r = Math.round(n * f) / f;
+    if (r === 0) r = 0;   // squashes -0
+    return (r > 0 ? '+' : r < 0 ? '-' : '') + Math.abs(r).toFixed(places);
   }
 
   // ------------------------------------------------------------ adjustment
@@ -824,6 +858,7 @@ CalTrack.trend = (function () {
     DEFAULT_WINDOW: DEFAULT_WINDOW,
     dayNumber: dayNumber,
     dateFromDay: dateFromDay,
+    signedFixed: signedFixed,
     dailyIntake: dailyIntake,
     emaSeries: emaSeries,
     linearFit: linearFit,

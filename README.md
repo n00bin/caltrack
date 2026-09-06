@@ -20,10 +20,12 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   or tap the date to jump to one. Go over and the number flips to how far over
   you are, in red.
 - **Logging** — the round `+` button. It guesses the meal from the clock,
-  shows your foods most-recently-used first, then asks for an amount. Two taps
-  and a number for something you've eaten before. Before you commit it tells
-  you what it would leave you for the day, so you can decide on the spot
-  whether it fits.
+  shows your foods most-recently-used first, then asks for an amount. Three
+  taps for something you've eaten before, no typing. Before you commit it
+  tells you what it would leave you for the day, in red if it would put you
+  over, so you can decide on the spot whether it fits. Got the amount wrong?
+  Tap the logged row and change it; it stays on the same meal and day.
+  Removed something by mistake? The toast has an Undo.
 - **Searching by name** — for the things with no barcode: a takeaway, a
   restaurant plate, a raw ingredient. Tap **Search all foods** in the log
   sheet. **13,000 foods are built into the app** — no key, no connection,
@@ -55,7 +57,9 @@ portions, meals, weigh-ins, and the adaptive-TDEE and plateau maths.
   off and the calories don't.
 - **Trend** — weigh in, and the chart shows the smoothed trend line
   prominently with the raw scale readings faint behind it. Weighing twice in
-  a day replaces the reading rather than stacking it. The date box follows
+  a day replaces the reading rather than stacking it. A reading more than a
+  tenth off the nearest one asks "save it anyway?", which is what catches
+  kilograms typed into the pounds box. Removing a weigh-in has an Undo. The date box follows
   the calendar even when the phone keeps the app open for days, so a Thursday
   weigh-in does not land on Tuesday and wipe Tuesday's reading.
 - **What you actually burn** — your TDEE, backed out of what really happened
@@ -244,7 +248,7 @@ Two deliberate refusals in the parsing, both covered by tests:
 ## The maths, and one deliberate change to the plan
 
 `trend.js` holds all of it, touches neither the DOM nor storage, and is
-covered by 196 checks against synthetic data where the right answer is known
+covered by 206 checks against synthetic data where the right answer is known
 in advance — including the plan's own worked example (2,100 kcal a day and
 2 lb lost over 28 days gives a TDEE of 2,350).
 
@@ -454,7 +458,7 @@ there are no accounts yet. That means:
 All of them run without a browser and without a network: `node test-store.js
 && node test-scan.js && node test-trend.js && node test-usda.js && node
 test-shell.js && node test-audit.js && node test-mealrow.js && node
-test-today.js` is 477 checks in
+test-today.js` is 487 checks in
 about a second.
 
 `store.js` is deliberately walled off, and every one of its functions returns a

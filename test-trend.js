@@ -203,6 +203,27 @@ const settings = { target_kcal: 2000, target_rate_lbs_per_week: 1, tdee_override
   eq('and nothing is raised', p.tier, 'none');
 }
 
+// Gaining in the first week used to read "On track: -0.7 lb lost". It is
+// said as gaining, with no minus sign in the prose and no "on track".
+{
+  const run = makeRun({ days: 4, intake: 1800, startWeight: 180, lbsPerDay: -0.7 / 3 });
+  const p = T.plateau({ entries: run.entries, weighIns: run.weighIns,
+    settings: { tdee_override: 2200 }, asOf: run.asOf });
+  ok('gaining is called gaining', /\bUp\b/.test(p.message));
+  ok('and never "on track"', !/On track/.test(p.message));
+  ok('and no minus sign in the prose', !/-\d/.test(p.message));
+}
+
+// Two weeks of gaining reaches a tier; still no negative percentage.
+{
+  const run = makeRun({ days: 15, intake: 1800, startWeight: 180, lbsPerDay: -0.1 });
+  const p = T.plateau({ entries: run.entries, weighIns: run.weighIns,
+    settings: { tdee_override: 2200 }, asOf: run.asOf });
+  ok('a tier fires after two weeks', p.tier !== 'none');
+  ok('gaining is said as up or gained', /gained|is up/.test(p.message));
+  ok('and not as a negative percent', !/-\d+%/.test(p.message));
+}
+
 // Dead flat for four weeks: confirmed.
 {
   const run = makeRun({ days: 28, intake: 2000, startWeight: 220, lbsPerDay: 0 });
@@ -702,6 +723,10 @@ near('slope of a clean 1 lb/week fall',
   T.slopeLbsPerWeek(makeRun({ days: 28, startWeight: 200, lbsPerDay: 1 / 7, intake: 0 })
     .weighIns.map(w => ({ date: w.date, raw: w.weight_lbs })), 'raw'), -1, 0.02);
 eq('round trip through day numbers', T.dateFromDay(T.dayNumber('2026-08-30')), '2026-08-30');
+eq('a tiny loss never prints as minus zero', T.signedFixed(-0.03, 1), '0.0');
+eq('a gain gets a plus', T.signedFixed(0.26, 1), '+0.3');
+eq('a loss gets a minus', T.signedFixed(-1.26, 1), '-1.3');
+eq('two places work too', T.signedFixed(-0.004, 2), '0.00');
 
 console.log(fails === 0 ? '\nALL PASS' : '\n' + fails + ' FAILED');
 process.exit(fails ? 1 : 0);
